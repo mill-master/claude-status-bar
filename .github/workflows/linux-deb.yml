@@ -21,7 +21,9 @@ jobs:
         run: |
           python3 linux/gen-assets.py --repo . --out linux/build/assets
           python3 -m unittest discover -s linux/tests
-          node --test tests/
+          # Shell glob, not a directory argument: the runner's node predates directory
+          # support for --test.
+          node --test tests/*.test.js
       - name: Build the .deb
         run: linux/package.sh
       - name: Attach to release
