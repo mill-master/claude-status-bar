@@ -384,6 +384,8 @@ class StatusApp:
         self.menu_signature = None
         self.session_items = {}   # id -> Gtk.MenuItem
         self._syncing_menu = False
+        self.menu_mapped = False  # the dropdown is on screen right now
+        self.menu_dirty = False   # a structural change waits for it to close
         self.player = None        # Gst playbin, if GStreamer is available
         self.Notify = None        # gi Notify module, if libnotify is available
 
@@ -624,8 +626,11 @@ class StatusApp:
         return line
 
     def _sync_menu(self):
-        """Rebuild the menu when its structure changes; refresh row texts in place otherwise
-        (GTK menus, unlike NSMenu, tolerate live label updates)."""
+        """Rebuild the menu when its structure changes, but never while it is on screen:
+        a rebuild swaps the widget and the open dropdown would vanish under the pointer
+        (sessions re-sort by recency, so two active sessions would close it constantly).
+        While open, or unchanged, row texts refresh in place; the rebuild runs when the
+        menu unmaps."""
         now = time.time()
         visible = self._visible_sessions(now)
         signature = (
@@ -634,16 +639,18 @@ class StatusApp:
             bool(self.setting("thinkingWords")), float(self.setting("soundThreshold") or 0),
             self.setting("notifyMode"), self.setting("latestVersion"),
         )
-        if signature != self.menu_signature:
+        if signature != self.menu_signature and not self.menu_mapped:
             self.menu_signature = signature
+            self.menu_dirty = False
             self._build_menu(visible, now)
-        else:
-            for s in visible:
-                item = self.session_items.get(s.id)
-                if item is not None:
-                    text = self._row_text(s, now)
-                    if item.get_label() != text:
-                        item.set_label(text)
+            return
+        self.menu_dirty = signature != self.menu_signature
+        for s in visible:
+            item = self.session_items.get(s.id)
+            if item is not None:
+                text = self._row_text(s, now)
+                if item.get_label() != text:
+                    item.set_label(text)
 
     def _header(self, menu, title):
         it = self.Gtk.MenuItem(label=title)
@@ -690,8 +697,11 @@ class StatusApp:
             self._header(menu, "Sessions")
             for s in visible:
                 it = Gtk.MenuItem(label=self._row_text(s, now))
-                # Row clicks are inert for now: raising the right terminal window is not
-                # portable across Wayland compositors.
+                backend = self._focus_backend(s)
+                if backend is not None:
+                    it.connect("activate", lambda _item, b=backend: b())
+                # No route to this session's terminal (ssh, unknown emulator): the row
+                # stays display-only.
                 self.session_items[s.id] = it
                 menu.append(it)
             menu.append(Gtk.SeparatorMenuItem())
@@ -729,9 +739,48 @@ class StatusApp:
         quit_item.connect("activate", self._quit_clicked)
         menu.append(quit_item)
 
+        menu.connect("map", self._on_menu_mapped)
+        menu.connect("unmap", self._on_menu_unmapped)
         menu.show_all()
         self.indicator.set_menu(menu)
         self._syncing_menu = False
+
+    def _on_menu_mapped(self, *_):
+        self.menu_mapped = True
+
+    def _on_menu_unmapped(self, *_):
+        self.menu_mapped = False
+        # A deferred structural change lands now, ready for the next open.
+        if self.menu_dirty:
+            self._sync_menu()
+
+    def _focus_backend(self, s):
+        """A zero-argument raiser for this session's terminal, or None when no route fits
+        this desktop. Raises the terminal APP, not the exact tab, matching macOS.
+        Compositor commands go first where their sockets exist; then DBus activation
+        (verified to present the existing window, not spawn one, on GNOME); then wmctrl
+        for plain X11 sessions."""
+        def spawn(argv):
+            return lambda: subprocess.Popen(argv, stdout=subprocess.DEVNULL,
+                                            stderr=subprocess.DEVNULL)
+        if s.term_program == "vscode":
+            code = shutil.which("code")
+            return spawn([code]) if code else None  # single-instance: bare `code` focuses it
+        term = core.terminal_for_pid(s.pid) if s.pid > 0 else None
+        if term is None:
+            return None
+        if os.environ.get("SWAYSOCK") and shutil.which("swaymsg"):
+            return spawn(["swaymsg", f'[app_id="{term["app_id"]}"]', "focus"])
+        if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and shutil.which("hyprctl"):
+            return spawn(["hyprctl", "dispatch", "focuswindow", f'class:{term["app_id"]}'])
+        if term.get("dbus"):
+            name = term["dbus"]
+            return spawn(["gdbus", "call", "--session", "--dest", name,
+                          "--object-path", "/" + name.replace(".", "/"),
+                          "--method", "org.freedesktop.Application.Activate", "{}"])
+        if os.environ.get("XDG_SESSION_TYPE") == "x11" and shutil.which("wmctrl"):
+            return spawn(["wmctrl", "-x", "-a", term["class"]])
+        return None
 
     def _quit_clicked(self, *_):
         # The marker keeps update.js's self-relaunch from undoing an explicit Quit; cleared on

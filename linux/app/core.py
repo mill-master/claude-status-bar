@@ -266,6 +266,55 @@ def status_text(s, eff, use_thinking_words, word):
     return "Done" if s.state == "done" else "Idle"
 
 
+# Terminal emulators a session row can jump to, keyed by /proc comm (kernel-truncated to
+# 15 chars). Each carries the raise routes it supports: "dbus" for desktops where
+# org.freedesktop.Application.Activate presents the existing window (GNOME among them),
+# "app_id" for sway/hyprland focus commands, "class" for X11 wmctrl.
+TERMINALS = {
+    "gnome-terminal-": {"dbus": "org.gnome.Terminal", "app_id": "org.gnome.Terminal", "class": "Gnome-terminal"},
+    "ptyxis":          {"dbus": "org.gnome.Ptyxis", "app_id": "org.gnome.Ptyxis", "class": "org.gnome.Ptyxis"},
+    "kgx":             {"dbus": "org.gnome.Console", "app_id": "org.gnome.Console", "class": "Kgx"},
+    "tilix":           {"dbus": "com.gexperts.Tilix", "app_id": "com.gexperts.Tilix", "class": "Tilix"},
+    "konsole":         {"app_id": "org.kde.konsole", "class": "konsole"},
+    "alacritty":       {"app_id": "Alacritty", "class": "Alacritty"},
+    "kitty":           {"app_id": "kitty", "class": "kitty"},
+    "wezterm-gui":     {"app_id": "org.wezfurlong.wezterm", "class": "org.wezfurlong.wezterm"},
+    "foot":            {"app_id": "foot", "class": "foot"},
+    "xterm":           {"app_id": "xterm", "class": "XTerm"},
+}
+
+
+def _read_comm(pid):
+    with open(f"/proc/{pid}/comm", "r", encoding="utf-8") as f:
+        return f.read().strip()
+
+
+def _read_ppid(pid):
+    with open(f"/proc/{pid}/status", "r", encoding="utf-8") as f:
+        for line in f:
+            if line.startswith("PPid:"):
+                return int(line.split()[1])
+    return 0
+
+
+def terminal_for_pid(pid, read_comm=_read_comm, read_ppid=_read_ppid, hops=15):
+    """The TERMINALS entry for the emulator hosting this process, walked up /proc
+    ancestry. None when the chain ends without meeting one: a session over ssh, inside
+    an editor, or re-parented by a multiplexer server."""
+    p = pid
+    for _ in range(hops):
+        if p <= 1:
+            return None
+        try:
+            term = TERMINALS.get(read_comm(p))
+            if term is not None:
+                return term
+            p = read_ppid(p)
+        except Exception:
+            return None
+    return None
+
+
 def auto_icon_color(desktop, color_scheme):
     """The icon ink for the "Auto" color: white on GNOME, whose top bar is dark in the
     stock themes whatever the color scheme says; elsewhere follow the scheme."""

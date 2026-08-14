@@ -30,7 +30,7 @@
 
 **No timer or label next to the icon?** GNOME renders the AppIndicator label; some desktops (KDE among them) show only the icon. The per-session timers in the dropdown work everywhere.
 
-**Clicking a session row does nothing.** On macOS a row click raises the Claude app or the session's terminal; raising a specific window isn't portable across Wayland compositors, so Linux rows are display-only for now.
+**Clicking a session row: what it raises.** A row click brings that session's terminal APP to the front (the app, not the exact tab, same as macOS). The terminal is found by walking the session's process ancestry; the raise goes through DBus activation (GNOME Terminal, Ptyxis, Console, Tilix), the compositor on Sway/Hyprland, or wmctrl on X11. A session with no such route (over ssh, an emulator the app doesn't know) keeps a display-only row; VS Code sessions raise VS Code via `code`.
 
 **Using `CLAUDE_CONFIG_DIR`?** The hooks are written into the `settings.json` that Claude Code actually reads, resolved from `CLAUDE_CONFIG_DIR` at install time. Run the first launch (or `node /usr/share/claude-status-bar/hooks/install.js`) from a shell with the same environment your Claude Code sessions use.
 
