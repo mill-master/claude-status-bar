@@ -16,11 +16,27 @@ const event = process.argv[2];
 
 fs.mkdirSync(stateDir, { recursive: true });
 
+// Same resolution as update.js: on Linux the hook's parent is a transient shell, so walk
+// /proc ancestry to the session's actual `claude` process (0 = not found, age-pruned later).
+const sessionPid = () => {
+  if (MAC) return process.ppid;
+  let pid = process.ppid;
+  for (let i = 0; i < 10 && pid > 1; i++) {
+    let comm = "";
+    try { comm = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim(); } catch { return 0; }
+    if (comm === "claude") return pid;
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+      pid = parseInt((stat.match(/^PPid:\s*(\d+)/m) || [])[1], 10);
+    } catch { return 0; }
+  }
+  return 0;
+};
 const running = () => {
   if (MAC) { try { cp.execSync(`pgrep -x ${EXEC}`, { stdio: "ignore" }); return true; } catch { return false; } }
   // Pure /proc reads, no subprocess: the pid file names the last app instance, and the cmdline
   // check keeps a reused pid from counting as ours. A stale file after a crash reads as not
-  // running, which is exactly what lets the self-heal relaunch work.
+  // running, which is what tells this hook leftover session files are stale, not live.
   try {
     const pid = parseInt(fs.readFileSync(pidFile, "utf8"), 10);
     if (!(pid > 0)) return false;
@@ -74,7 +90,7 @@ function run() {
     try {
       // started:false — a merely-opened conversation seeds this for launch + liveness but stays out of
       // the dropdown until it has real activity (update.js flips started:true on a prompt/tool).
-      writeAtomic(statePath, { state: "idle", label: "", tool: "", project: cwd ? path.basename(cwd) : "", cwd, sessionId: id, transcript: "", entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT || "", term_program: process.env.TERM_PROGRAM || "", pid: process.ppid, started: false, startedAt: 0, ts: Math.floor(Date.now() / 1000) });
+      writeAtomic(statePath, { state: "idle", label: "", tool: "", project: cwd ? path.basename(cwd) : "", cwd, sessionId: id, transcript: "", entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT || "", term_program: process.env.TERM_PROGRAM || "", pid: sessionPid(), started: false, startedAt: 0, ts: Math.floor(Date.now() / 1000) });
     } catch {}
     launchApp();
   } else if (event === "end") {

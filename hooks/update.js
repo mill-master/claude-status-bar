@@ -25,6 +25,26 @@ const TOOL_LABELS = {
 
 const safeId = (s) => String(s || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 64) || "unknown";
 
+// The session's `claude` process, whose liveness drives the app's session reaping.
+// macOS spawns hook commands directly, so process.ppid IS the claude process (verified).
+// Linux spawns them through a transient shell that dies with the hook; recording that pid
+// made the app reap every session within a tick. Walk /proc ancestry to the nearest
+// ancestor named claude instead; 0 when there is none (the app falls back to age pruning).
+const sessionPid = () => {
+  if (process.platform === "darwin") return process.ppid;
+  let pid = process.ppid;
+  for (let i = 0; i < 10 && pid > 1; i++) {
+    let comm = "";
+    try { comm = fs.readFileSync(`/proc/${pid}/comm`, "utf8").trim(); } catch { return 0; }
+    if (comm === "claude") return pid;
+    try {
+      const stat = fs.readFileSync(`/proc/${pid}/status`, "utf8");
+      pid = parseInt((stat.match(/^PPid:\s*(\d+)/m) || [])[1], 10);
+    } catch { return 0; }
+  }
+  return 0;
+};
+
 let raw = "";
 process.stdin.on("data", (d) => (raw += d));
 process.stdin.on("end", () => {
@@ -94,11 +114,9 @@ process.stdin.on("end", () => {
   // TERM_PROGRAM identifies the terminal app for a CLI session (Apple_Terminal, iTerm.app,
   // vscode, WezTerm, …); the app uses it to bring that terminal to the front on a row click.
   const termProgram = process.env.TERM_PROGRAM || prev.term_program || "";
-  // process.ppid IS this session's `claude` process (verified: hooks are spawned directly by it,
-  // stable for the session's life, on both CLI and desktop). The app uses kill(pid,0) for liveness.
   // started:true — any update.js event (prompt/tool/permission/stop) is real activity, so the session
   // graduates from "merely opened" to visible in the dropdown. Clicking a conversation never fires here.
-  const out = { state, label, tool: p.tool_name || "", project, cwd, sessionId: p.session_id || "", transcript: p.transcript_path || prev.transcript || "", entrypoint, term_program: termProgram, pid: process.ppid, started: true, startedAt, ts };
+  const out = { state, label, tool: p.tool_name || "", project, cwd, sessionId: p.session_id || "", transcript: p.transcript_path || prev.transcript || "", entrypoint, term_program: termProgram, pid: sessionPid(), started: true, startedAt, ts };
   try {
     fs.mkdirSync(stateDir, { recursive: true });
     const tmp = statePath + "." + process.pid + ".tmp";
