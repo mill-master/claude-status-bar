@@ -164,6 +164,14 @@ class Formatting(unittest.TestCase):
         for _ in range(50):
             self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
 
+    def test_bar_label_counts_working_sessions(self):
+        self.assertEqual(core.bar_label("Percolating…", 1, True), "Percolating…")
+        self.assertEqual(core.bar_label("Percolating…", 3, True), "Percolating…  ×3")
+        self.assertEqual(core.bar_label("Percolating…", 3, True, "1m 2s"), "Percolating…  ×3  1m 2s")
+        # A permission lead keeps its message unambiguous: no count suffix.
+        self.assertEqual(core.bar_label("Awaiting permission", 2, False), "Awaiting permission")
+        self.assertEqual(core.bar_label("", 0, False), "")
+
 
 class ParseSession(unittest.TestCase):
     def test_defaults_and_types(self):

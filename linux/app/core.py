@@ -264,3 +264,15 @@ def status_text(s, eff, use_thinking_words, word):
     if eff in WORKING_STATES:
         return working_label(s, use_thinking_words, word)
     return "Done" if s.state == "done" else "Idle"
+
+
+def bar_label(base, working_count, lead_working, elapsed_text=""):
+    """The bar's full label: the lead's message, a ×N count when several sessions work at
+    once (only while the lead itself is working, so a permission message stays unambiguous
+    about what the number counts), and the elapsed clock when the timer is on."""
+    parts = [base] if base else []
+    if lead_working and working_count > 1:
+        parts.append(f"×{working_count}")
+    if elapsed_text:
+        parts.append(elapsed_text)
+    return "  ".join(parts)

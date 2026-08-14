@@ -299,6 +299,8 @@ class StatusApp:
         self.current_icon = None
         self.current_label = None
         self.lead_started_at = 0.0
+        self.working_count = 0
+        self.lead_working = False
         self.menu_signature = None
         self.session_items = {}   # id -> Gtk.MenuItem
         self._syncing_menu = False
@@ -391,6 +393,8 @@ class StatusApp:
 
         core.assign_display_names(list(self.sessions.values()))
         lead = core.pick_lead(self.sessions.values())
+        self.working_count = sum(1 for s in self.sessions.values() if s.eff in core.WORKING_STATES)
+        self.lead_working = lead is not None and lead.eff in core.WORKING_STATES
         if lead is None:
             self._render(icon=self.icons.resting(self.style, self.color), label="", started_at=0)
         elif lead.eff == "permission":
@@ -475,14 +479,15 @@ class StatusApp:
             self.indicator.set_icon_full(name, "Claude Status Bar")
 
     def _apply_label(self, base):
-        text = base
+        elapsed_text = ""
         if self.setting("showTimer") and self.lead_started_at > 0:
-            text += "  " + core.elapsed(time.time() - self.lead_started_at)
+            elapsed_text = core.elapsed(time.time() - self.lead_started_at)
+        text = core.bar_label(base, self.working_count, self.lead_working, elapsed_text)
         if text:
             text = " " + text
         if text != self.current_label:
             self.current_label = text
-            self.indicator.set_label(text, " Metamorphosing…  88m 88s")
+            self.indicator.set_label(text, " Metamorphosing…  ×88  88m 88s")
 
     def restyle(self):
         """Re-render the current state after a style/color change."""
