@@ -29,7 +29,7 @@ if (process.platform === "darwin") {
   try {
     const pid = parseInt(fs.readFileSync(path.join(MARKER, "app.pid"), "utf8"), 10);
     const cmdline = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
-    if (pid > 0 && (cmdline.includes("claude-status-bar") || cmdline.includes("main.py"))) {
+    if (pid > 0 && (cmdline.includes("claude-status-bar") || cmdline.includes("app/main.py"))) {
       process.kill(pid, "SIGTERM");
     }
   } catch {}

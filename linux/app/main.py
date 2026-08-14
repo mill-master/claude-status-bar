@@ -95,13 +95,13 @@ def app_version():
         return VERSION
     except ImportError:
         pass
-    for candidate in (app_dir().parent.parent / "build.sh", app_dir().parent.parent.parent / "build.sh"):
-        try:
-            m = re.search(r"CFBundleShortVersionString</key><string>([0-9.]+)", candidate.read_text())
-            if m:
-                return m.group(1)
-        except OSError:
-            continue
+    try:
+        m = re.search(r"CFBundleShortVersionString</key><string>([0-9.]+)",
+                      (app_dir().parent.parent / "build.sh").read_text())
+        if m:
+            return m.group(1)
+    except OSError:
+        pass
     return "0"
 
 

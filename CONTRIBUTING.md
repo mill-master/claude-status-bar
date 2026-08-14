@@ -1,6 +1,6 @@
 # Contributing
 
-> **About this fork.** The upstream project ([m1ckc3s/claude-status-bar](https://github.com/m1ckc3s/claude-status-bar)) is Claude Code on macOS and scopes Linux ports out to forks; this fork is where the Linux port lives. Linux-side contributions are welcome here; for the shared macOS core, upstream's policy below is the better guide and upstream the better destination.
+> **About this fork.** The upstream project ([m1ckc3s/claude-status-bar](https://github.com/m1ckc3s/claude-status-bar)) is Claude Code on macOS and scopes Linux ports out to forks; this fork is where the Linux port lives. Linux-side contributions are welcome here; for the shared macOS core, upstream is the better destination. The policy text below is upstream's, kept verbatim: where it says Linux ports belong in your own fork, this is that fork.
 
 Thanks for your interest. This is a tiny menu bar app and I'd like to keep it that way.
 
@@ -38,7 +38,7 @@ Signing and notarization use the maintainer's Developer ID; without it you get a
 
 ### Linux (this fork)
 
-You'll need python3-gi, gir1.2-ayatanaappindicator3-0.1, Pillow, and Node.js.
+You'll need python3-gi, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, Pillow, and Node.js.
 
 ```bash
 linux/gen-assets.py --repo . --out linux/build/assets   # derive frames/words from Sources/
