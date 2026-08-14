@@ -1,0 +1,37 @@
+name: linux-deb
+
+# Builds the Ubuntu/Debian package and, on a published release, attaches it to that
+# release. The macOS DMG lane stays local (build.sh); this is its Linux counterpart.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install build dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends python3-pil fonts-dejavu-core
+      - name: Run tests
+        run: |
+          python3 linux/gen-assets.py --repo . --out linux/build/assets
+          python3 -m unittest discover -s linux/tests
+          node --test tests/
+      - name: Build the .deb
+        run: linux/package.sh
+      - name: Attach to release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" linux/build/*.deb --clobber
+      - name: Keep as workflow artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: claude-status-bar-deb
+          path: linux/build/*.deb
