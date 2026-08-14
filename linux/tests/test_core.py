@@ -207,6 +207,9 @@ class Extras(unittest.TestCase):
                          [("proj needs permission", "Claude is waiting for your approval")])
         plan = core.notify_plan("all", [], [("proj", 90), ("quick", 5)])
         self.assertEqual(plan, [("proj finished", "The turn ran 1m 30s")])  # short turns stay quiet
+        # "done" alone: turn-end pings without permission pings, for bypass-permissions users.
+        self.assertEqual(core.notify_plan("done", ["proj"], [("proj", 90)]),
+                         [("proj finished", "The turn ran 1m 30s")])
         self.assertEqual(core.notify_plan("bogus", ["a"], []), [])
 
 

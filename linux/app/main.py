@@ -71,7 +71,8 @@ DEFAULT_SETTINGS = {
 }
 
 SOUND_CHOICES = [(0, "Off"), (0.1, "Every turn"), (60, "1 min+"), (300, "5 min+"), (900, "15 min+")]
-NOTIFY_CHOICES = [("off", "Off"), ("permission", "Permission"), ("all", "Permission + turn end")]
+NOTIFY_CHOICES = [("off", "Off"), ("permission", "Permission"), ("done", "Turn end"),
+                  ("all", "Permission + turn end")]
 STYLE_CHOICES = [("web", "Claude Spark"), ("code", "Claude Code"), ("crab", "Crab Walking")]
 COLOR_CHOICES = [("orange", "Orange"), ("auto", "Auto"), ("white", "White"), ("black", "Black")]
 

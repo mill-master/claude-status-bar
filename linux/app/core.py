@@ -283,13 +283,15 @@ def notify_plan(mode, permission_names, done_turns):
 
     permission_names: session names that just began awaiting permission.
     done_turns: (session name, turn seconds) for turns that just finished.
-    Returns (title, body) pairs; mode "off" and unknown modes return nothing.
+    "permission" and "done" each cover one kind alone ("done" is the mode for
+    bypass-permissions workflows, which never see a permission prompt), "all" covers
+    both; "off" and unknown modes return nothing.
     """
     out = []
     if mode in ("permission", "all"):
         for name in permission_names:
             out.append((f"{name} needs permission", "Claude is waiting for your approval"))
-    if mode == "all":
+    if mode in ("done", "all"):
         for name, secs in done_turns:
             if secs >= NOTIFY_DONE_MIN:
                 out.append((f"{name} finished", f"The turn ran {elapsed(secs)}"))
