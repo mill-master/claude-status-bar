@@ -1,5 +1,7 @@
 # Contributing
 
+> **About this fork.** The upstream project ([m1ckc3s/claude-status-bar](https://github.com/m1ckc3s/claude-status-bar)) is Claude Code on macOS and scopes Linux ports out to forks; this fork is where the Linux port lives. Linux-side contributions are welcome here; for the shared macOS core, upstream's policy below is the better guide and upstream the better destination.
+
 Thanks for your interest. This is a tiny menu bar app and I'd like to keep it that way.
 
 It does one thing: show Claude Code's live status. It stays local (the only network call is a daily update check), free (no API key, no spend), and small (a status bar, not a dashboard).
@@ -33,6 +35,19 @@ You'll need macOS 12+, the Swift toolchain (Xcode Command Line Tools), and Node.
 ```
 
 Signing and notarization use the maintainer's Developer ID; without it you get an ad-hoc build, which is fine for testing. Launch it, start a Claude Code session, and the icon appears.
+
+### Linux (this fork)
+
+You'll need python3-gi, gir1.2-ayatanaappindicator3-0.1, Pillow, and Node.js.
+
+```bash
+linux/gen-assets.py --repo . --out linux/build/assets   # derive frames/words from Sources/
+linux/claude-status-bar                                  # run the app from the checkout
+linux/package.sh                                         # -> linux/build/claude-status-bar_<ver>_all.deb
+python3 -m unittest discover -s linux/tests && node --test tests/
+```
+
+The animation frames and thinking words live in the Swift sources; `gen-assets.py` derives the Linux copies at build time, so edit them there.
 
 Build off the latest `main` so you're not fixing something that already changed.
 

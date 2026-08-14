@@ -3,6 +3,15 @@
 All notable changes to Claude Status Bar are documented here. This project follows
 [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- **Linux support (Ubuntu/Debian .deb).** The same status bar in the Linux top bar / system tray, on anything with AppIndicator/StatusNotifierItem support: stock Ubuntu GNOME, KDE, XFCE. All three animation styles (Claude Spark, Claude Code, Crab Walking), the live timer label, thinking words, the sessions dropdown with git branch and per-session timers, the amber permission dot, the completion sound, self-launch and self-quit. The icon color menu offers Orange, White, and Black (a Linux panel's theme isn't reliably detectable, so System mode has no Linux equivalent). The app is a small Python/GTK renderer over the exact same hook-written state files as the macOS app; animation frames and thinking words are derived from the Swift sources at build time, so the two can't drift. Install: download the `.deb` from Releases, `sudo apt install ./claude-status-bar_*_all.deb`, run `claude-status-bar` once.
+- Hook lifecycle events are logged too when `CLAUDE_STATUSBAR_DEBUG=1` is set (update.js events already were), which is how the fix below was found.
+
+### Fixed
+- **`CLAUDE_CONFIG_DIR` is honored.** The installer used to write the hooks into `~/.claude/settings.json` unconditionally; with `CLAUDE_CONFIG_DIR` set, Claude Code reads a different settings.json and the hooks never fired: no icon, no error, nothing. Install and uninstall now resolve settings.json through `CLAUDE_CONFIG_DIR`, on macOS and Linux both. The state files and hook scripts stay under `~/.claude/statusbar/`, which the app finds without needing Claude's environment.
+
 ## [0.4.4] - 2026-08-05
 
 ### Changed

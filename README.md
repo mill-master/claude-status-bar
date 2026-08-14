@@ -1,6 +1,6 @@
 
 
-A tiny macOS menu bar app that shows **Claude Code's live status**: an animated Claude icon while it's thinking or running a tool, a yellow dot when it's awaiting your permission, and the elapsed time of the current turn. Lightweight, no window, no dock icon, no usage dashboards.
+A tiny menu bar app for macOS and Linux that shows **Claude Code's live status**: an animated Claude icon while it's thinking or running a tool, a yellow dot when it's awaiting your permission, and the elapsed time of the current turn. Lightweight, no window, no dock icon, no usage dashboards.
 
 Built so you can tab away during a long "thinking" stretch and still see, at a glance, whether Claude is working, waiting on you, or done.
 
@@ -30,11 +30,24 @@ The one launch at the end matters: it wires up the Claude Code hooks automatical
 3. Launch it once. On first launch it wires up the Claude Code hooks for you automatically.
 4. Start a new Claude Code session, the icon appears whenever Claude Code is running.
 
+### Ubuntu / Debian
+
+1. Download the latest `claude-status-bar_*_all.deb` from [Releases](../../releases).
+2. `sudo apt install ./claude-status-bar_*_all.deb` (dependencies come with it).
+3. Run `claude-status-bar` once. That first launch wires up the Claude Code hooks.
+4. Start a new Claude Code session, the icon appears in the top bar whenever Claude Code is running.
+
+Works out of the box on stock Ubuntu (GNOME), KDE, and XFCE: anything that shows
+AppIndicator/StatusNotifierItem tray icons. Same three animations, same menu; the icon
+color menu offers Orange, White, and Black.
+
 ## Updating
 
 The menu tells you when an update is ready. Installed via brew, it shows **Update via brew** with a copy button (paste the command in your terminal); it appears once Homebrew can actually deliver the new version, which can lag a release by up to a day. Installed via DMG, **Update available** opens the releases page, plus a one-click **Switch to Homebrew** option.
 
 Or just run `brew upgrade --cask claude-status-bar` (brew), or download the latest DMG and drag it into Applications (manual). Hooks refresh themselves on the next launch; nothing to run by hand. **Upgrading from 0.3.x via DMG? Launch the app once after dragging**, that's what retires the old-named copy ([details](HOMEBREW.md#faq--troubleshooting)).
+
+On Linux, **Update to x.y.z** in the menu opens the releases page; install the new `.deb` the same way as the first one.
 
 ## What it shows
 
@@ -72,11 +85,12 @@ Everything is controlled from the menu:
 
 The app is stateless. Claude Code fires hooks as it works; the app polls those updates and aggregates them across every live session into a single icon, a permission dot if one needs you, animating if any session is working, resting when all are idle. It launches itself when Claude Code opens and quits when nothing's running, so there's nothing to manage.
 
-The installer merges its hooks into `~/.claude/settings.json` (backing it up first), and the app's only network activity is a once-a-day update check against GitHub's and Homebrew's public APIs ([details](PRIVACY.md)).
+The installer merges its hooks into your Claude Code `settings.json` (honoring `CLAUDE_CONFIG_DIR`, backing the file up first), and the app's only network activity is a once-a-day update check against GitHub's and Homebrew's public APIs ([details](PRIVACY.md)).
 
 ## Requirements
 
-- macOS 12+, [Claude Code](https://claude.com/claude-code) (CLI or the Desktop app), Node.js
+- macOS 12+, or a Linux desktop with AppIndicator/StatusNotifierItem support (stock Ubuntu 22.04+ qualifies)
+- [Claude Code](https://claude.com/claude-code) (CLI or the Desktop app), Node.js
 
 ## Troubleshooting
 
@@ -84,12 +98,21 @@ See [Troubleshooting](TROUBLESHOOTING.md)
 
 ## Uninstall
 
+macOS:
+
 ```bash
 node "/Applications/Claude Status Bar.app/Contents/Resources/uninstall.js"   # removes only our hooks
 brew uninstall --zap claude-status-bar                                       # removes the app + every file it created
 ```
 
 Installed manually instead of via brew? Skip the second line and drag the app to the Trash.
+
+Ubuntu / Debian:
+
+```bash
+node /usr/share/claude-status-bar/hooks/uninstall.js   # removes our hooks and stops the app
+sudo apt remove claude-status-bar                      # removes the app
+```
 
 ## Acknowledgements
 

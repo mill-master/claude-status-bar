@@ -22,6 +22,18 @@
 
 **Seeing 2 icons?** The desktop app shows its own menu bar icon (the quick-screenshot one). To avoid two icons sitting side by side, open Claude's **Settings → General** and turn that built-in menu bar item off.
 
+## Linux
+
+**No icon in the top bar?** The app is a StatusNotifierItem, so the desktop needs an AppIndicator host. Stock Ubuntu, KDE, and XFCE have one; vanilla GNOME (Debian, Fedora) needs the `gnome-shell-extension-appindicator` package enabled. Check the app itself with `pgrep -f claude-status-bar`, and inspect what it sees with `claude-status-bar --dump` (prints every live session and the aggregate as JSON).
+
+**No timer or label next to the icon?** GNOME renders the AppIndicator label; some desktops (KDE among them) show only the icon. The per-session timers in the dropdown work everywhere.
+
+**Using `CLAUDE_CONFIG_DIR`?** The hooks are written into the `settings.json` that Claude Code actually reads, resolved from `CLAUDE_CONFIG_DIR` at install time. Run the first launch (or `node /usr/share/claude-status-bar/hooks/install.js`) from a shell with the same environment your Claude Code sessions use.
+
+**Hooks acting up?** Set `CLAUDE_STATUSBAR_DEBUG=1` in the environment of a Claude Code session and read `~/.claude/statusbar/hooks.log`: every hook invocation is logged with its event and session.
+
+**No completion sound?** The chime plays through GStreamer. `sudo apt install gstreamer1.0-plugins-good gir1.2-gst-plugins-base-1.0` and restart the app; without GStreamer the Completion Sound menu simply doesn't appear.
+
 ---
 
 ## Known issues
