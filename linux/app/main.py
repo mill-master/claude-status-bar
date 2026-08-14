@@ -387,6 +387,7 @@ class StatusApp:
         self.menu_mapped = False  # the dropdown is on screen right now
         self.menu_dirty = False   # a structural change waits for it to close
         self._focus_ext_ready = False  # refreshed on each menu build
+        self._ext_pending_notified = False  # the "after your next login" note, once per run
         self.player = None        # Gst playbin, if GStreamer is available
         self.Notify = None        # gi Notify module, if libnotify is available
 
@@ -767,6 +768,49 @@ class StatusApp:
 
     FOCUS_EXT_NAME = "io.github.millmaster.ClaudeStatusBarFocus"
     FOCUS_EXT_PATH = "/io/github/millmaster/ClaudeStatusBarFocus"
+    FOCUS_EXT_UUID = "claude-status-bar-focus@mill-master.github.io"
+
+    def _focus_ext_installed(self):
+        data_home = Path(os.environ.get("XDG_DATA_HOME", HOME / ".local" / "share"))
+        return any((base / "gnome-shell" / "extensions" / self.FOCUS_EXT_UUID).is_dir()
+                   for base in (Path("/usr/share"), data_home))
+
+    def ensure_focus_extension_enabled(self):
+        """On GNOME, enable the bundled extension the first time. Enablement is a
+        gsettings entry the shell consults at login, so the write works before the
+        shell has scanned the extension dir; the jump feature then arrives with the
+        next login, no command from the user."""
+        if "gnome" not in os.environ.get("XDG_CURRENT_DESKTOP", "").lower():
+            return
+        try:
+            from gi.repository import Gio
+            source = Gio.SettingsSchemaSource.get_default()
+            if source is None or source.lookup("org.gnome.shell", True) is None:
+                return
+            st = Gio.Settings.new("org.gnome.shell")
+            enabled = list(st.get_strv("enabled-extensions"))
+            schema_keys = st.props.settings_schema
+            disabled = (list(st.get_strv("disabled-extensions"))
+                        if schema_keys.has_key("disabled-extensions") else [])
+            if core.extension_enable_decision(self._focus_ext_installed(), enabled,
+                                              disabled, self.FOCUS_EXT_UUID):
+                enabled.append(self.FOCUS_EXT_UUID)
+                st.set_strv("enabled-extensions", enabled)
+                Gio.Settings.sync()
+        except Exception:
+            pass
+
+    def _notify_extension_pending(self):
+        """A row was clicked while the extension is installed but the shell hasn't
+        scanned it yet (needs one login). Say so once per run, or the silence reads
+        as breakage."""
+        self._click_log("extension installed but not active yet (needs a re-login)")
+        if self._ext_pending_notified or self.Notify is None:
+            return
+        self._ext_pending_notified = True
+        self._show_notification("Jump-to-terminal activates after your next login",
+                                "The Claude Status Bar shell extension is installed and "
+                                "will be picked up when you next log in.")
 
     def _focus_extension_ready(self):
         """Whether the bundled GNOME extension owns its bus name right now. Checked per
@@ -819,6 +863,8 @@ class StatusApp:
             return lambda: self._raise_via_extension(term["match"])
         if os.environ.get("XDG_SESSION_TYPE") == "x11" and shutil.which("wmctrl"):
             return spawn(["wmctrl", "-x", "-a", term["class"]], f"wmctrl {term['class']}")
+        if self._focus_ext_installed():
+            return self._notify_extension_pending
         return None
 
     def _quit_clicked(self, *_):
@@ -955,6 +1001,7 @@ class StatusApp:
         self._build_menu([], time.time())
 
         self.ensure_hooks_installed()
+        self.ensure_focus_extension_enabled()
         self.check_for_update()
         self.tick()
         GLib.timeout_add(400, self.tick)

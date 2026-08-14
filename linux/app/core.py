@@ -316,6 +316,13 @@ def terminal_for_pid(pid, read_comm=_read_comm, read_ppid=_read_ppid, hops=15):
     return None
 
 
+def extension_enable_decision(installed, enabled, disabled, uuid):
+    """Whether to append the bundled extension's uuid to the shell's enabled list: only
+    on a first meeting, installed but present in neither list. A uuid in the disabled
+    list is a user decision automation must not fight."""
+    return bool(installed) and uuid not in enabled and uuid not in disabled
+
+
 def auto_icon_color(desktop, color_scheme):
     """The icon ink for the "Auto" color: white on GNOME, whose top bar is dark in the
     stock themes whatever the color scheme says; elsewhere follow the scheme."""

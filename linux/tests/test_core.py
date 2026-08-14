@@ -204,6 +204,14 @@ class Extras(unittest.TestCase):
         # A vanished /proc entry mid-walk reads as no route, not an error.
         self.assertIsNone(core.terminal_for_pid(100, comm, lambda p: 12345))
 
+    def test_extension_enable_decision(self):
+        uuid = "x@y"
+        self.assertTrue(core.extension_enable_decision(True, [], [], uuid))
+        self.assertFalse(core.extension_enable_decision(False, [], [], uuid))
+        self.assertFalse(core.extension_enable_decision(True, [uuid], [], uuid))
+        # An explicit disable is a user decision; automation never fights it.
+        self.assertFalse(core.extension_enable_decision(True, [], [uuid], uuid))
+
     def test_auto_icon_color(self):
         self.assertEqual(core.auto_icon_color("ubuntu:GNOME", "'default'"), "white")
         self.assertEqual(core.auto_icon_color("KDE", "'prefer-dark'"), "white")
