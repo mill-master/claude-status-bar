@@ -7,11 +7,13 @@ const os = require("os");
 const path = require("path");
 const cp = require("child_process");
 
+const MAC = process.platform === "darwin";
 const dir = path.join(os.homedir(), ".claude", "statusbar");
 const stateDir = path.join(dir, "state.d");
 // Written by the app's Quit menu item; suppresses the relaunch below so Quit sticks.
 // lifecycle.js removes it on the next SessionStart (a new session = fresh consent).
 const quitMarker = path.join(dir, "quit-intent");
+const pidFile = path.join(dir, "app.pid"); // Linux: the app holds an exclusive flock on it for life
 const event = process.argv[2] || "";
 
 const TOOL_LABELS = {
@@ -107,11 +109,24 @@ process.stdin.on("end", () => {
   // Self-heal: a session with live state but no app to show it relaunches the app. Covers
   // install-while-a-session-is-already-open (that session never fires SessionStart, the only
   // other opener) and an app killed/crashed mid-session. Skipped after an explicit menu Quit.
+  const running = () => {
+    if (MAC) { try { cp.execSync("pgrep -x ClaudeStatusBar", { stdio: "ignore" }); return true; } catch { return false; } }
+    // Pure /proc reads, no subprocess: the pid file names the last app instance, and the cmdline
+    // check keeps a reused pid from counting as ours. A stale file after a crash reads as not
+    // running, which is exactly what lets the self-heal relaunch work.
+    try {
+      const pid = parseInt(fs.readFileSync(pidFile, "utf8"), 10);
+      if (!(pid > 0)) return false;
+      const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+      return cmd.includes("claude-status-bar") || cmd.includes("app/main.py");
+    } catch { return false; }
+  };
   try {
-    if (!fs.existsSync(quitMarker)) {
-      cp.execSync("pgrep -x ClaudeStatusBar", { stdio: "ignore" });
+    if (!fs.existsSync(quitMarker) && !running()) {
+      const child = MAC ? cp.spawn("open", ["-g", "-b", "com.local.claudestatusbar"], { stdio: "ignore", detached: true })
+                        : cp.spawn("claude-status-bar", [], { stdio: "ignore", detached: true });
+      child.on("error", () => {}); // app not installed: a spawn error must not take the hook down
+      child.unref();
     }
-  } catch {
-    try { cp.spawn("open", ["-g", "-b", "com.local.claudestatusbar"], { stdio: "ignore", detached: true }).unref(); } catch {}
-  }
+  } catch {}
 });

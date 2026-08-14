@@ -8,13 +8,32 @@ const cp = require("child_process");
 
 const BUNDLE_ID = "com.local.claudestatusbar";
 const EXEC = "ClaudeStatusBar";
+const MAC = process.platform === "darwin";
 const dir = path.join(os.homedir(), ".claude", "statusbar");
 const stateDir = path.join(dir, "state.d");
+const pidFile = path.join(dir, "app.pid"); // Linux: the app holds an exclusive flock on it for life
 const event = process.argv[2];
 
 fs.mkdirSync(stateDir, { recursive: true });
 
-const running = () => { try { cp.execSync(`pgrep -x ${EXEC}`, { stdio: "ignore" }); return true; } catch { return false; } };
+const running = () => {
+  if (MAC) { try { cp.execSync(`pgrep -x ${EXEC}`, { stdio: "ignore" }); return true; } catch { return false; } }
+  // Pure /proc reads, no subprocess: the pid file names the last app instance, and the cmdline
+  // check keeps a reused pid from counting as ours. A stale file after a crash reads as not
+  // running, which is exactly what lets the self-heal relaunch work.
+  try {
+    const pid = parseInt(fs.readFileSync(pidFile, "utf8"), 10);
+    if (!(pid > 0)) return false;
+    const cmd = fs.readFileSync(`/proc/${pid}/cmdline`, "utf8");
+    return cmd.includes("claude-status-bar") || cmd.includes("app/main.py");
+  } catch { return false; }
+};
+const launchApp = () => {
+  const child = MAC ? cp.spawn("open", ["-g", "-b", BUNDLE_ID], { stdio: "ignore", detached: true })
+                    : cp.spawn("claude-status-bar", [], { stdio: "ignore", detached: true });
+  child.on("error", () => {}); // app not installed: a spawn error must not take the hook down
+  child.unref();
+};
 const safeId = (s) => String(s || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 64) || "unknown";
 
 const writeAtomic = (file, obj) => {
@@ -36,6 +55,14 @@ function run() {
   id = safeId(id);
   const statePath = path.join(stateDir, id + ".json");
 
+  // Off by default; CLAUDE_STATUSBAR_DEBUG=1 logs lifecycle activity next to update.js's log.
+  if (process.env.CLAUDE_STATUSBAR_DEBUG === "1") {
+    try {
+      fs.appendFileSync(path.join(dir, "hooks.log"),
+        `${new Date().toISOString()} [lifecycle:${event}] session=${id} running=${running()} files=${(() => { try { return fs.readdirSync(stateDir).length; } catch { return "?"; } })()}\n`);
+    } catch {}
+  }
+
   if (event === "start") {
     // A new session voids a prior explicit Quit (see update.js's self-relaunch suppress).
     try { fs.rmSync(path.join(dir, "quit-intent"), { force: true }); } catch {}
@@ -49,7 +76,7 @@ function run() {
       // the dropdown until it has real activity (update.js flips started:true on a prompt/tool).
       writeAtomic(statePath, { state: "idle", label: "", tool: "", project: cwd ? path.basename(cwd) : "", cwd, sessionId: id, transcript: "", entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT || "", term_program: process.env.TERM_PROGRAM || "", pid: process.ppid, started: false, startedAt: 0, ts: Math.floor(Date.now() / 1000) });
     } catch {}
-    cp.spawn("open", ["-g", "-b", BUNDLE_ID], { stdio: "ignore", detached: true }).unref();
+    launchApp();
   } else if (event === "end") {
     // Removing the file drops this session from the aggregate — this is also what recovers a
     // frozen animation on force-quit (SessionEnd fires, but no Stop). No state rewrite needed.
