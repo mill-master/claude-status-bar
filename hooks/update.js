@@ -31,7 +31,7 @@ const safeId = (s) => String(s || "").replace(/[^A-Za-z0-9_.-]/g, "").slice(0, 6
 // made the app reap every session within a tick. Walk /proc ancestry to the nearest
 // ancestor named claude instead; 0 when there is none (the app falls back to age pruning).
 const sessionPid = () => {
-  if (process.platform === "darwin") return process.ppid;
+  if (MAC) return process.ppid;
   let pid = process.ppid;
   for (let i = 0; i < 10 && pid > 1; i++) {
     let comm = "";

@@ -16,7 +16,8 @@ from dataclasses import dataclass, field
 CAP_PERMISSION = 7200
 CAP_WORKING = 900
 
-# Reap fallback for pre-upgrade files that carry no pid: idle + older than this is dropped.
+# Reap fallback for sessions with no usable pid (pre-upgrade files, or a Linux ancestry
+# walk that found no `claude` process): idle + older than this is dropped.
 DEFAULT_STALE_PRUNE_AGE = 900
 
 WORKING_STATES = ("thinking", "tool")
