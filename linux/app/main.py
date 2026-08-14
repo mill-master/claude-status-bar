@@ -41,6 +41,7 @@ PID_FILE = SB_DIR / "app.pid"
 
 CONFIG_DIR = Path(os.environ.get("XDG_CONFIG_HOME", HOME / ".config")) / APP_ID
 SETTINGS_PATH = CONFIG_DIR / "settings.json"
+ANIM_DIR = CONFIG_DIR / "animations"   # user GIFs; each becomes an Animation menu entry
 CACHE_DIR = Path(os.environ.get("XDG_CACHE_HOME", HOME / ".cache")) / APP_ID
 
 ORANGE = (217, 119, 87)    # #d97757, Anthropic's "Orange" accent
@@ -184,6 +185,36 @@ class IconSet:
         self.dir = CACHE_DIR / "icons" / version
         self.dir.mkdir(parents=True, exist_ok=True)
         self._done = set()
+        # User GIFs from ANIM_DIR, discovered once per run: stem -> path. Style ids are
+        # "gif:<stem>"; frames and fps come from the GIF itself (_load_gif).
+        self.custom = {}
+        try:
+            self.custom = {p.stem: p for p in sorted(ANIM_DIR.glob("*.gif"))}
+        except OSError:
+            pass
+        self._gif_cache = {}
+
+    def _load_gif(self, stem):
+        """The GIF's frames as RGBA (scaled to at most 60px on the long side) and its fps
+        from the frame durations. Heavily optimized GIFs with partial-frame disposal may
+        render imperfectly; sprite-style GIFs come out clean."""
+        if stem in self._gif_cache:
+            return self._gif_cache[stem]
+        from PIL import Image, ImageSequence
+        frames, durations = [], []
+        with Image.open(self.custom[stem]) as im:
+            for frame in ImageSequence.Iterator(im):
+                durations.append(frame.info.get("duration", 100))
+                f = frame.convert("RGBA")
+                if max(f.size) > 60:
+                    scale = 60 / max(f.size)
+                    f = f.resize((max(1, round(f.size[0] * scale)),
+                                  max(1, round(f.size[1] * scale))), Image.LANCZOS)
+                frames.append(f)
+        avg = (sum(durations) / len(durations)) if durations else 100
+        fps = max(4.0, min(15.0, 1000.0 / max(1.0, avg)))
+        self._gif_cache[stem] = (frames, fps)
+        return self._gif_cache[stem]
 
     def theme_path(self):
         return str(self.dir)
@@ -231,7 +262,12 @@ class IconSet:
             return names
         from PIL import Image
         rgb = COLORS[color]
-        if style == "web":
+        if style.startswith("gif:"):
+            frames, _ = self._load_gif(style[len("gif:"):])
+            for i, f in enumerate(frames):
+                out = f.copy() if color == "orange" else self._crab_template(f.copy(), rgb)
+                self._write(names[i], out)
+        elif style == "web":
             for i in range(8):
                 self._write(f"csb-web-{color}-{i}", self._mask_tint(self._load(f"spark-{i}.png"), rgb))
         elif style == "crab":
@@ -262,10 +298,19 @@ class IconSet:
         return names
 
     def frame_names(self, style, color):
+        if style.startswith("gif:"):
+            stem = style[len("gif:"):]
+            frames, _ = self._load_gif(stem)
+            slug = re.sub(r"[^A-Za-z0-9_-]", "-", stem)
+            return [f"csb-gif-{slug}-{color}-{i}" for i in range(len(frames))]
         counts = {"web": 8, "crab": 20, "code": 5 * CODE_SUB}
         return [f"csb-{style}-{color}-{i}" for i in range(counts[style])]
 
     def resting(self, style, color):
+        # The animated sprites (crab, user GIFs) rest on their first frame; the mask
+        # styles rest on the Claude logo.
+        if style.startswith("gif:"):
+            return self.ensure(style, color)[0]
         name = f"csb-crab-{color}-0" if style == "crab" else f"csb-logo-{color}"
         if not (self.dir / f"{name}.png").exists():
             if style == "crab":
@@ -284,6 +329,8 @@ class IconSet:
         return name
 
     def fps(self, style):
+        if style.startswith("gif:"):
+            return self._load_gif(style[len("gif:"):])[1]
         return {"web": SPARK_FPS, "crab": CRAB_FPS, "code": (5 * CODE_SUB) / CODE_CYCLE}[style]
 
 
@@ -474,7 +521,11 @@ class StatusApp:
     @property
     def style(self):
         s = self.setting("animStyle")
-        return s if s in ("web", "code", "crab") else "web"
+        if s in ("web", "code", "crab"):
+            return s
+        if isinstance(s, str) and s.startswith("gif:") and s[len("gif:"):] in self.icons.custom:
+            return s
+        return "web"  # unknown style, or the GIF it named is gone
 
     @property
     def color(self):
@@ -631,7 +682,8 @@ class StatusApp:
         self._header(menu, "Options")
         self._check_item(menu, "Show timer", "showTimer")
         self._check_item(menu, "Thinking words", "thinkingWords")
-        self._radio_submenu(menu, "Animation", STYLE_CHOICES, "animStyle", str)
+        styles = STYLE_CHOICES + [(f"gif:{stem}", stem) for stem in self.icons.custom]
+        self._radio_submenu(menu, "Animation", styles, "animStyle", str)
         self._radio_submenu(menu, "Color", COLOR_CHOICES, "iconColor", str)
         if self.player is not None:
             self._radio_submenu(menu, "Completion Sound", SOUND_CHOICES, "soundThreshold", float)
@@ -832,7 +884,10 @@ def run_waybar():
         try:
             print(json.dumps(payload), flush=True)
         except BrokenPipeError:
-            return  # the bar went away
+            # The bar went away. Point stdout at /dev/null so the interpreter's
+            # shutdown flush doesn't print a second BrokenPipeError to stderr.
+            os.dup2(os.open(os.devnull, os.O_WRONLY), sys.stdout.fileno())
+            return
         time.sleep(1)
 
 

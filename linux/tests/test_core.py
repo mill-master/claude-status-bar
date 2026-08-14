@@ -223,6 +223,21 @@ class Icons(unittest.TestCase):
         for name in (icons.resting("web", "orange"), icons.resting("crab", "orange"), icons.dot()):
             self.assertTrue((icons.dir / f"{name}.png").exists(), name)
 
+    def test_custom_gif_becomes_an_animation(self):
+        from PIL import Image
+        app_main.ANIM_DIR.mkdir(parents=True, exist_ok=True)
+        colors = [(255, 0, 0, 255), (0, 255, 0, 255), (20, 20, 20, 255)]
+        frames = [Image.new("RGBA", (20, 20), c) for c in colors]
+        frames[0].save(app_main.ANIM_DIR / "pet.gif", save_all=True,
+                       append_images=frames[1:], duration=80, loop=0)
+        icons = app_main.IconSet("test-gif")
+        self.assertIn("pet", icons.custom)
+        names = icons.ensure("gif:pet", "orange")
+        self.assertEqual(len(names), 3)
+        self.assertTrue(all((icons.dir / f"{n}.png").exists() for n in names))
+        self.assertAlmostEqual(icons.fps("gif:pet"), 12.5, delta=0.1)
+        self.assertEqual(icons.resting("gif:pet", "white"), icons.ensure("gif:pet", "white")[0])
+
     def test_crab_template_eyes_become_holes(self):
         from PIL import Image
         icons = app_main.IconSet("test")
