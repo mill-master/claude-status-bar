@@ -164,6 +164,19 @@ class Formatting(unittest.TestCase):
         for _ in range(50):
             self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
 
+    def test_bar_label_counts_working_sessions(self):
+        self.assertEqual(core.bar_label("Percolating…", 1, True), "Percolating…")
+        self.assertEqual(core.bar_label("Percolating…", 3, True), "Percolating…  ×3")
+        self.assertEqual(core.bar_label("Percolating…", 3, True, "1m 2s"), "Percolating…  ×3  1m 2s")
+        # A permission lead keeps its message unambiguous: no count suffix.
+        self.assertEqual(core.bar_label("Awaiting permission", 2, False), "Awaiting permission")
+        self.assertEqual(core.bar_label("", 0, False), "")
+
+
+class Extras(unittest.TestCase):
+    """The Linux-side policy functions: what to notify, which ink Auto picks, and the
+    waybar payload."""
+
     def test_waybar_payload(self):
         self.assertEqual(core.waybar_payload([], now=1000),
                          {"text": "", "class": "idle", "tooltip": ""})
@@ -184,6 +197,7 @@ class Formatting(unittest.TestCase):
     def test_auto_icon_color(self):
         self.assertEqual(core.auto_icon_color("ubuntu:GNOME", "'default'"), "white")
         self.assertEqual(core.auto_icon_color("KDE", "'prefer-dark'"), "white")
+        self.assertEqual(core.auto_icon_color("KDE", "prefer-dark"), "white")
         self.assertEqual(core.auto_icon_color("KDE", "'default'"), "black")
         self.assertEqual(core.auto_icon_color("", ""), "black")
 
@@ -194,14 +208,6 @@ class Formatting(unittest.TestCase):
         plan = core.notify_plan("all", [], [("proj", 90), ("quick", 5)])
         self.assertEqual(plan, [("proj finished", "The turn ran 1m 30s")])  # short turns stay quiet
         self.assertEqual(core.notify_plan("bogus", ["a"], []), [])
-
-    def test_bar_label_counts_working_sessions(self):
-        self.assertEqual(core.bar_label("Percolating…", 1, True), "Percolating…")
-        self.assertEqual(core.bar_label("Percolating…", 3, True), "Percolating…  ×3")
-        self.assertEqual(core.bar_label("Percolating…", 3, True, "1m 2s"), "Percolating…  ×3  1m 2s")
-        # A permission lead keeps its message unambiguous: no count suffix.
-        self.assertEqual(core.bar_label("Awaiting permission", 2, False), "Awaiting permission")
-        self.assertEqual(core.bar_label("", 0, False), "")
 
 
 class ParseSession(unittest.TestCase):

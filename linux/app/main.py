@@ -77,13 +77,34 @@ COLOR_CHOICES = [("orange", "Orange"), ("auto", "Auto"), ("white", "White"), ("b
 
 
 def detect_auto_color():
+    """The ink for "Auto". GNOME short-circuits to white (its top bar stays dark whatever
+    the scheme says); elsewhere ask the XDG settings portal, the cross-desktop scheme
+    source KDE implements, then gsettings, then rest on black."""
+    desktop = os.environ.get("XDG_CURRENT_DESKTOP", "")
+    if "gnome" in desktop.lower():
+        return "white"
+    scheme = ""
     try:
-        scheme = subprocess.run(
-            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+        out = subprocess.run(
+            ["gdbus", "call", "--session", "--dest", "org.freedesktop.portal.Desktop",
+             "--object-path", "/org/freedesktop/portal/desktop",
+             "--method", "org.freedesktop.portal.Settings.Read",
+             "org.freedesktop.appearance", "color-scheme"],
             capture_output=True, text=True, timeout=5).stdout
+        if "uint32 1" in out:
+            scheme = "prefer-dark"
+        elif "uint32 2" in out:
+            scheme = "prefer-light"
     except Exception:
-        scheme = ""
-    return core.auto_icon_color(os.environ.get("XDG_CURRENT_DESKTOP", ""), scheme)
+        pass
+    if not scheme:
+        try:
+            scheme = subprocess.run(
+                ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+                capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            scheme = ""
+    return core.auto_icon_color(desktop, scheme)
 
 
 def app_dir():

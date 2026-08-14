@@ -36,8 +36,8 @@ Version: $VERSION
 Section: utils
 Priority: optional
 Architecture: all
-Depends: python3, python3-gi, python3-pil, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, gir1.2-notify-0.7, nodejs
-Recommends: gir1.2-gst-plugins-base-1.0, gstreamer1.0-plugins-good
+Depends: python3, python3-gi, python3-pil, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, nodejs
+Recommends: gir1.2-notify-0.7, gir1.2-gst-plugins-base-1.0, gstreamer1.0-plugins-good
 Maintainer: $MAINTAINER
 Homepage: https://github.com/mill-master/claude-status-bar
 Description: Claude Code status icon for the system tray
