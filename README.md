@@ -39,9 +39,9 @@ The one launch at the end matters: it wires up the Claude Code hooks automatical
 
 Works out of the box on stock Ubuntu (GNOME), KDE, and XFCE: anything that shows
 AppIndicator/StatusNotifierItem tray icons. Same three animations, same menu, plus
-Linux extras: opt-in desktop notifications (permission waits, finished turns), an Auto
-icon color, a ×N count when several sessions work at once, and your own GIFs as
-animation styles (drop them in `~/.config/claude-status-bar/animations/`).
+Linux extras: an opt-in popup when a long turn finishes, an Auto icon color, a ×N
+count when several sessions work at once, and your own GIFs as animation styles
+(drop them in `~/.config/claude-status-bar/animations/`).
 
 **Sway / Hyprland / i3:** no tray needed. `claude-status-bar --waybar` streams the
 status as a waybar custom module (polybar reads the same stream with `tail = true`):

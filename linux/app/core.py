@@ -278,24 +278,17 @@ def auto_icon_color(desktop, color_scheme):
 NOTIFY_DONE_MIN = 60
 
 
-def notify_plan(mode, permission_names, done_turns):
-    """The desktop notifications this tick's edges earn under the chosen mode.
+def notify_plan(mode, done_turns):
+    """Desktop notifications for turns that just finished, as (title, body) pairs.
 
-    permission_names: session names that just began awaiting permission.
-    done_turns: (session name, turn seconds) for turns that just finished.
-    "permission" and "done" each cover one kind alone ("done" is the mode for
-    bypass-permissions workflows, which never see a permission prompt), "all" covers
-    both; "off" and unknown modes return nothing.
+    done_turns: (session name, turn seconds). Active when mode is "done" (or the
+    retired multi-mode setting's "all", which included turn end). Anything else,
+    including "off", returns nothing.
     """
-    out = []
-    if mode in ("permission", "all"):
-        for name in permission_names:
-            out.append((f"{name} needs permission", "Claude is waiting for your approval"))
-    if mode in ("done", "all"):
-        for name, secs in done_turns:
-            if secs >= NOTIFY_DONE_MIN:
-                out.append((f"{name} finished", f"The turn ran {elapsed(secs)}"))
-    return out
+    if mode not in ("done", "all"):
+        return []
+    return [(f"{name} finished", f"The turn ran {elapsed(secs)}")
+            for name, secs in done_turns if secs >= NOTIFY_DONE_MIN]
 
 
 def bar_label(base, working_count, lead_working, elapsed_text=""):

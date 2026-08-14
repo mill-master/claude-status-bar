@@ -201,16 +201,15 @@ class Extras(unittest.TestCase):
         self.assertEqual(core.auto_icon_color("KDE", "'default'"), "black")
         self.assertEqual(core.auto_icon_color("", ""), "black")
 
-    def test_notify_plan_modes(self):
-        self.assertEqual(core.notify_plan("off", ["a"], [("a", 500)]), [])
-        self.assertEqual(core.notify_plan("permission", ["proj"], [("proj", 500)]),
-                         [("proj needs permission", "Claude is waiting for your approval")])
-        plan = core.notify_plan("all", [], [("proj", 90), ("quick", 5)])
-        self.assertEqual(plan, [("proj finished", "The turn ran 1m 30s")])  # short turns stay quiet
-        # "done" alone: turn-end pings without permission pings, for bypass-permissions users.
-        self.assertEqual(core.notify_plan("done", ["proj"], [("proj", 90)]),
+    def test_notify_plan(self):
+        self.assertEqual(core.notify_plan("off", [("proj", 500)]), [])
+        self.assertEqual(core.notify_plan("done", [("proj", 90), ("quick", 5)]),
+                         [("proj finished", "The turn ran 1m 30s")])  # short turns stay quiet
+        # "all" is a value the retired multi-mode setting could have saved; it included
+        # turn end, so it still counts as on.
+        self.assertEqual(core.notify_plan("all", [("proj", 90)]),
                          [("proj finished", "The turn ran 1m 30s")])
-        self.assertEqual(core.notify_plan("bogus", ["a"], []), [])
+        self.assertEqual(core.notify_plan("permission", [("proj", 90)]), [])  # retired value
 
 
 class ParseSession(unittest.TestCase):

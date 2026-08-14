@@ -63,7 +63,7 @@ DEFAULT_SETTINGS = {
     "animStyle": "web",        # web | code | crab
     "iconColor": "orange",     # orange | white | black
     "soundThreshold": 0,       # 0 = off; else min turn length (seconds) that chimes on completion
-    "notifyMode": "off",       # off | permission | all (permission + turns >= NOTIFY_DONE_MIN)
+    "notifyMode": "off",       # off | done (notify on turns >= NOTIFY_DONE_MIN)
     "hideIdleAfter": 900,      # hide a resting session's row after this long; 0 = never
     "installedVersion": "",
     "latestVersion": "",
@@ -71,8 +71,6 @@ DEFAULT_SETTINGS = {
 }
 
 SOUND_CHOICES = [(0, "Off"), (0.1, "Every turn"), (60, "1 min+"), (300, "5 min+"), (900, "15 min+")]
-NOTIFY_CHOICES = [("off", "Off"), ("permission", "Permission"), ("done", "Turn end"),
-                  ("all", "Permission + turn end")]
 STYLE_CHOICES = [("web", "Claude Spark"), ("code", "Claude Code"), ("crab", "Crab Walking")]
 COLOR_CHOICES = [("orange", "Orange"), ("auto", "Auto"), ("white", "White"), ("black", "Black")]
 
@@ -450,7 +448,7 @@ class StatusApp:
     def evaluate(self):
         now = time.time()
         chime = False
-        perm_edges, done_edges = [], []
+        done_edges = []
         sound_threshold = float(self.setting("soundThreshold") or 0)
         stale_age = float(self.setting("hideIdleAfter") or 0)
         for sid in list(self.sessions):
@@ -466,8 +464,6 @@ class StatusApp:
                 self.file_mtimes.pop(f"{sid}.json", None)
                 continue
             self._update_thinking_word(s)
-            if s.state == "permission" and self.prev_state.get(sid, "") != "permission":
-                perm_edges.append(sid)
             secs = self._turn_completed(s, now)
             if secs is not None:
                 if sound_threshold > 0 and secs >= sound_threshold:
@@ -482,11 +478,10 @@ class StatusApp:
             self._play_sound()
 
         core.assign_display_names(list(self.sessions.values()))
-        if (perm_edges or done_edges) and self.Notify is not None:
+        if done_edges and self.Notify is not None:
             names = {s.id: core.session_name(s) for s in self.sessions.values()}
             for title, body in core.notify_plan(
                     self.setting("notifyMode"),
-                    [names.get(i, "session") for i in perm_edges],
                     [(names.get(i, "session"), secs) for i, secs in done_edges]):
                 self._show_notification(title, body)
         lead = core.pick_lead(self.sessions.values())
@@ -710,7 +705,14 @@ class StatusApp:
         if self.player is not None:
             self._radio_submenu(menu, "Completion Sound", SOUND_CHOICES, "soundThreshold", float)
         if self.Notify is not None:
-            self._radio_submenu(menu, "Notifications", NOTIFY_CHOICES, "notifyMode", str)
+            it = Gtk.CheckMenuItem(label="Turn-end notification")
+            it.set_active(self.setting("notifyMode") in ("done", "all"))
+            def on_notify_toggle(item):
+                if self._syncing_menu:
+                    return
+                self.set_setting("notifyMode", "done" if item.get_active() else "off")
+            it.connect("toggled", on_notify_toggle)
+            menu.append(it)
 
         menu.append(Gtk.SeparatorMenuItem())
         version_item = Gtk.MenuItem(label=f"Version {self.version}")

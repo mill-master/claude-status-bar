@@ -34,7 +34,7 @@
 
 **Using `CLAUDE_CONFIG_DIR`?** The hooks are written into the `settings.json` that Claude Code actually reads, resolved from `CLAUDE_CONFIG_DIR` at install time. Run the first launch (or `node /usr/share/claude-status-bar/hooks/install.js`) from a shell with the same environment your Claude Code sessions use.
 
-**No desktop notifications?** The Notifications menu only appears when libnotify is present (`sudo apt install gir1.2-notify-0.7`), and popups also need a notification daemon: desktop environments run one, minimal Sway/Hyprland setups add one (mako, dunst). The mode is off by default; turn it on from the icon's menu.
+**No turn-end popup?** The "Turn-end notification" check item only appears when libnotify is present (`sudo apt install gir1.2-notify-0.7`), and popups also need a notification daemon: desktop environments run one, minimal Sway/Hyprland setups add one (mako, dunst). Off by default; turn it on from the icon's menu, and turns shorter than a minute stay quiet.
 
 **Auto color picked ink you can't see?** Auto is white on GNOME and follows the XDG portal / gsettings color scheme elsewhere; a panel themed against its desktop's scheme can defeat it. Pick White or Black manually, which is why they stay in the menu.
 
