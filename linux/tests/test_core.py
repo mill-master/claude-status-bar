@@ -1,0 +1,206 @@
+"""Headless tests for the Linux app's session-state logic (linux/app/core.py) and the
+PIL icon pipeline (no GTK, no display). Run: python3 -m unittest discover linux/tests"""
+
+import json
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+os.environ["XDG_CACHE_HOME"] = tempfile.mkdtemp(prefix="csb-test-cache-")
+os.environ["XDG_CONFIG_HOME"] = tempfile.mkdtemp(prefix="csb-test-config-")
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "app"))
+import core
+import main as app_main
+
+
+def sess(**kw):
+    s = core.Session()
+    for k, v in kw.items():
+        setattr(s, k, v)
+    return s
+
+
+class EffectiveState(unittest.TestCase):
+    def test_working_fresh_stays(self):
+        s = sess(state="thinking", ts=1000)
+        self.assertEqual(core.effective_state(s, now=1100, turn_line_reader=lambda p: None), "thinking")
+
+    def test_working_past_cap_collapses(self):
+        s = sess(state="tool", ts=1000)
+        self.assertEqual(core.effective_state(s, now=1000 + 901, turn_line_reader=lambda p: None), "idle")
+
+    def test_permission_has_longer_cap(self):
+        s = sess(state="permission", ts=1000)
+        self.assertEqual(core.effective_state(s, now=1000 + 7100, turn_line_reader=lambda p: None), "permission")
+        self.assertEqual(core.effective_state(s, now=1000 + 7201, turn_line_reader=lambda p: None), "idle")
+
+    def test_done_collapses_to_idle(self):
+        self.assertEqual(core.effective_state(sess(state="done", ts=1000), now=1001), "idle")
+
+    def test_interrupt_marker_collapses(self):
+        s = sess(state="thinking", ts=1000, transcript="/t")
+        reader = lambda p: '{"type":"user","content":"[Request interrupted by user]"}'
+        self.assertEqual(core.effective_state(s, now=1001, turn_line_reader=reader), "idle")
+
+
+class LastTurnLine(unittest.TestCase):
+    def test_skips_bookkeeping_lines(self):
+        with tempfile.NamedTemporaryFile("w", suffix=".jsonl", delete=False) as f:
+            f.write('{"type":"assistant","content":"interrupted by user"}\n')
+            f.write('{"type":"system","subtype":"away_summary"}\n')
+            f.write('{"type":"last-prompt"}\n')
+            path = f.name
+        self.addCleanup(os.unlink, path)
+        line = core.last_turn_line(path)
+        self.assertIn('"type":"assistant"', line)
+        self.assertIn("interrupted by user", line)
+
+
+class Reaping(unittest.TestCase):
+    def test_live_pid_stays(self):
+        s = sess(pid=os.getpid(), eff="idle", ts=0)
+        self.assertFalse(core.should_reap(s, now=1e12))
+
+    def test_dead_pid_reaps_even_when_working(self):
+        s = sess(pid=2 ** 22 + 12345, eff="thinking", ts=1e12)
+        self.assertTrue(core.should_reap(s, now=1e12, alive=lambda pid: False))
+
+    def test_pidless_falls_back_to_idle_age(self):
+        s = sess(pid=0, eff="idle", ts=1000)
+        self.assertTrue(core.should_reap(s, now=1000 + 901, stale_prune_age=900))
+        self.assertFalse(core.should_reap(s, now=1000 + 100, stale_prune_age=900))
+        s.eff = "thinking"
+        self.assertFalse(core.should_reap(s, now=1000 + 901, stale_prune_age=900))
+
+
+class Lead(unittest.TestCase):
+    def test_permission_beats_working_beats_idle(self):
+        idle = sess(id="a", eff="idle", ts=300)
+        working = sess(id="b", eff="thinking", ts=200)
+        perm = sess(id="c", eff="permission", ts=100)
+        self.assertEqual(core.pick_lead([idle, working, perm]).id, "c")
+        self.assertEqual(core.pick_lead([idle, working]).id, "b")
+        self.assertEqual(core.pick_lead([idle]).id, "a")
+        self.assertIsNone(core.pick_lead([]))
+
+    def test_recency_breaks_ties(self):
+        a = sess(id="a", eff="thinking", ts=100)
+        b = sess(id="b", eff="tool", ts=200)
+        self.assertEqual(core.pick_lead([a, b]).id, "b")
+
+
+class DisplayNames(unittest.TestCase):
+    def test_collision_gets_parent_qualifier(self):
+        a = sess(project="repo", cwd="/home/u/work/repo")
+        b = sess(project="repo", cwd="/home/u/tmp/repo")
+        c = sess(project="other", cwd="/home/u/other")
+        core.assign_display_names([a, b, c])
+        self.assertEqual(a.display_name, "work/repo")
+        self.assertEqual(b.display_name, "tmp/repo")
+        self.assertEqual(c.display_name, "other")
+
+    def test_empty_cwd_never_forces_qualifier(self):
+        a = sess(project="repo", cwd="/home/u/work/repo")
+        b = sess(project="repo", cwd="")
+        core.assign_display_names([a, b])
+        self.assertEqual(a.display_name, "repo")
+
+
+class Branch(unittest.TestCase):
+    def test_branch_detached_worktree_and_nongit(self):
+        with tempfile.TemporaryDirectory() as td:
+            repo = Path(td) / "repo"
+            (repo / ".git").mkdir(parents=True)
+            (repo / ".git" / "HEAD").write_text("ref: refs/heads/fix-auth\n")
+            self.assertEqual(core.branch_for_cwd(str(repo)), "fix-auth")
+            sub = repo / "deep" / "er"
+            sub.mkdir(parents=True)
+            self.assertEqual(core.branch_for_cwd(str(sub)), "fix-auth")
+
+            (repo / ".git" / "HEAD").write_text("a" * 40 + "\n")
+            self.assertEqual(core.branch_for_cwd(str(repo)), "a" * 7)
+
+            wt = Path(td) / "wt"
+            wt.mkdir()
+            gitdir = Path(td) / "gitdir"
+            gitdir.mkdir()
+            (gitdir / "HEAD").write_text("ref: refs/heads/wt-branch\n")
+            (wt / ".git").write_text(f"gitdir: {gitdir}\n")
+            self.assertEqual(core.branch_for_cwd(str(wt)), "wt-branch")
+
+            plain = Path(td) / "plain"
+            plain.mkdir()
+            self.assertEqual(core.branch_for_cwd(str(plain)), "")
+
+
+class Formatting(unittest.TestCase):
+    def test_elapsed(self):
+        self.assertEqual(core.elapsed(43), "43s")
+        self.assertEqual(core.elapsed(61), "1m 1s")
+        self.assertEqual(core.elapsed(-5), "0s")
+
+    def test_truncated(self):
+        self.assertEqual(core.truncated("short"), "short")
+        self.assertEqual(core.truncated("x" * 25, 20, 18), "x" * 18 + "…")
+
+    def test_version_newer(self):
+        self.assertTrue(core.version_newer("0.0.10", "0.0.9"))
+        self.assertFalse(core.version_newer("0.4.4", "0.4.4"))
+        self.assertTrue(core.version_newer("0.5", "0.4.4"))
+
+    def test_status_text(self):
+        self.assertEqual(core.status_text(sess(state="permission"), "permission", True, None),
+                         "Awaiting permission")
+        self.assertEqual(core.status_text(sess(state="thinking"), "thinking", True, "Percolating"),
+                         "Percolating…")
+        self.assertEqual(core.status_text(sess(state="tool", label="Editing"), "tool", True, None),
+                         "Editing")
+        self.assertEqual(core.status_text(sess(state="done"), "idle", True, None), "Done")
+
+    def test_pick_thinking_word_avoids_repeat(self):
+        for _ in range(50):
+            self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
+
+
+class ParseSession(unittest.TestCase):
+    def test_defaults_and_types(self):
+        s = core.parse_session({}, "x")
+        self.assertEqual((s.state, s.pid, s.started, s.ts), ("idle", 0, False, 0.0))
+        s = core.parse_session({"state": "tool", "pid": 4242, "started": True,
+                               "startedAt": 1000, "ts": 1001.5}, "y")
+        self.assertEqual((s.state, s.pid, s.started_at, s.ts), ("tool", 4242, 1000.0, 1001.5))
+        self.assertEqual(core.parse_session({"pid": "bogus"}, "z").pid, 0)
+
+
+class Icons(unittest.TestCase):
+    def test_render_all_styles_and_colors(self):
+        icons = app_main.IconSet("test")
+        self.assertEqual(len(icons.ensure("web", "orange")), 8)
+        self.assertEqual(len(icons.ensure("code", "white")), 30)
+        self.assertEqual(len(icons.ensure("crab", "black")), 20)
+        for name in (icons.resting("web", "orange"), icons.resting("crab", "orange"), icons.dot()):
+            self.assertTrue((icons.dir / f"{name}.png").exists(), name)
+
+    def test_crab_template_eyes_become_holes(self):
+        from PIL import Image
+        icons = app_main.IconSet("test")
+        icons.ensure("crab", "white")
+        orange = Image.open(icons.assets / "crab-0.png").convert("RGBA")
+        white = Image.open(icons.dir / "csb-crab-white-0.png").convert("RGBA")
+        # The template transform must produce holes (alpha 0) at pixels that were dark and
+        # opaque in the source — the crab's eyes read as negative space.
+        src, out = orange.load(), white.load()
+        holes = sum(
+            1
+            for y in range(orange.size[1])
+            for x in range(orange.size[0])
+            if src[x, y][3] > 200 and out[x, y][3] == 0
+        )
+        self.assertGreater(holes, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()

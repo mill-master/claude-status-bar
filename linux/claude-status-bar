@@ -1,0 +1,3 @@
+#!/bin/sh
+# Dev-run shim for a repo checkout; the .deb installs its own /usr/bin/claude-status-bar.
+exec python3 "$(dirname "$(readlink -f "$0")")/app/main.py" "$@"
