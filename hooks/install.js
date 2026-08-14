@@ -9,11 +9,15 @@ const path = require("path");
 const cp = require("child_process");
 
 const home = os.homedir();
+// The scripts + state stay at the fixed ~/.claude/statusbar (the app must find them without
+// Claude's env), but settings.json follows CLAUDE_CONFIG_DIR: hooks written anywhere else are
+// never read. Run the installer with the same env your Claude Code sessions use.
 const sbDir = path.join(home, ".claude", "statusbar");
 const MARKER = sbDir; // every hook command we add points inside this dir
 const updateDest = path.join(sbDir, "update.js");
 const lifecycleDest = path.join(sbDir, "lifecycle.js");
-const settingsPath = path.join(home, ".claude", "settings.json");
+const configDir = process.env.CLAUDE_CONFIG_DIR || path.join(home, ".claude");
+const settingsPath = path.join(configDir, "settings.json");
 
 // Retire the old 0.0.2 background watcher LaunchAgent on upgrade (0.0.3+ self-quits).
 const OLD_AGENT_LABEL = "com.local.claudestatusbar.watcher";
@@ -22,6 +26,7 @@ try { cp.execSync(`launchctl bootout gui/${process.getuid()}/${OLD_AGENT_LABEL}`
 if (fs.existsSync(oldAgentPlist)) { fs.rmSync(oldAgentPlist); console.log("Removed old desktop watcher LaunchAgent."); }
 
 fs.mkdirSync(sbDir, { recursive: true });
+fs.mkdirSync(configDir, { recursive: true });
 fs.rmSync(path.join(sbDir, "watcher.sh"), { force: true });
 // Retire pre-multi-session artifacts (single global state + empty liveness markers).
 fs.rmSync(path.join(sbDir, "state.json"), { force: true });

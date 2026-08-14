@@ -11,22 +11,23 @@ const staleNode = "/opt/homebrew/Cellar/node/26.5.0/bin/node";
 const nodePathPrefix =
   'PATH="/opt/homebrew/bin:/usr/local/bin${PATH:+:$PATH}" node ';
 
-const runScript = (scriptPath, home) => {
+const runScript = (scriptPath, home, extraEnv = {}) => {
   const script = [
     `require("node:child_process").execSync = () => {};`,
     `Object.defineProperty(process, "execPath", { value: process.env.MOCK_EXEC_PATH });`,
     `require(process.env.SCRIPT_PATH);`,
   ].join("\n");
 
-  execFileSync(process.execPath, ["-e", script], {
-    env: {
-      ...process.env,
-      HOME: home,
-      SCRIPT_PATH: scriptPath,
-      MOCK_EXEC_PATH: staleNode,
-    },
-    stdio: "pipe",
-  });
+  const env = {
+    ...process.env,
+    HOME: home,
+    SCRIPT_PATH: scriptPath,
+    MOCK_EXEC_PATH: staleNode,
+  };
+  // Exercise the default resolution regardless of the machine's own CLAUDE_CONFIG_DIR.
+  delete env.CLAUDE_CONFIG_DIR;
+  Object.assign(env, extraEnv);
+  execFileSync(process.execPath, ["-e", script], { env, stdio: "pipe" });
 };
 
 const runInstaller = (home) => runScript(installerPath, home);
@@ -176,6 +177,27 @@ test("reinstalling is idempotent", (t) => {
 
   assert.deepEqual(second, first);
   assert.equal(statusBarCommands(second).length, 8);
+});
+
+test("CLAUDE_CONFIG_DIR redirects settings.json; scripts stay under ~/.claude", (t) => {
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), "claude status bar configdir test-"));
+  t.after(() => fs.rmSync(home, { recursive: true, force: true }));
+  const configDir = path.join(home, "custom-config");
+
+  runScript(installerPath, home, { CLAUDE_CONFIG_DIR: configDir });
+
+  const settings = JSON.parse(
+    fs.readFileSync(path.join(configDir, "settings.json"), "utf8"),
+  );
+  assert.equal(statusBarCommands(settings).length, 8);
+  assert.ok(fs.existsSync(path.join(home, ".claude", "statusbar", "update.js")));
+  assert.equal(fs.existsSync(path.join(home, ".claude", "settings.json")), false);
+
+  runScript(uninstallerPath, home, { CLAUDE_CONFIG_DIR: configDir });
+  const after = JSON.parse(
+    fs.readFileSync(path.join(configDir, "settings.json"), "utf8"),
+  );
+  assert.equal(statusBarCommands(after).length, 0);
 });
 
 test("an empty inherited PATH never searches the working directory", (t) => {
