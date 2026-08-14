@@ -267,14 +267,14 @@ def status_text(s, eff, use_thinking_words, word):
 
 
 # Terminal emulators a session row can jump to, keyed by /proc comm (kernel-truncated to
-# 15 chars). Each carries the raise routes it supports: "dbus" for desktops where
-# org.freedesktop.Application.Activate presents the existing window (GNOME among them),
-# "app_id" for sway/hyprland focus commands, "class" for X11 wmctrl.
+# 15 chars). Each carries the raise routes it supports: "desktop" for DBus-activatable
+# apps raised through Gio with an activation token (Wayland compositors refuse the focus
+# transfer without one), "app_id" for sway/hyprland focus commands, "class" for X11 wmctrl.
 TERMINALS = {
-    "gnome-terminal-": {"dbus": "org.gnome.Terminal", "app_id": "org.gnome.Terminal", "class": "Gnome-terminal"},
-    "ptyxis":          {"dbus": "org.gnome.Ptyxis", "app_id": "org.gnome.Ptyxis", "class": "org.gnome.Ptyxis"},
-    "kgx":             {"dbus": "org.gnome.Console", "app_id": "org.gnome.Console", "class": "Kgx"},
-    "tilix":           {"dbus": "com.gexperts.Tilix", "app_id": "com.gexperts.Tilix", "class": "Tilix"},
+    "gnome-terminal-": {"desktop": "org.gnome.Terminal.desktop", "app_id": "org.gnome.Terminal", "class": "Gnome-terminal"},
+    "ptyxis":          {"desktop": "org.gnome.Ptyxis.desktop", "app_id": "org.gnome.Ptyxis", "class": "org.gnome.Ptyxis"},
+    "kgx":             {"desktop": "org.gnome.Console.desktop", "app_id": "org.gnome.Console", "class": "Kgx"},
+    "tilix":           {"desktop": "com.gexperts.Tilix.desktop", "app_id": "com.gexperts.Tilix", "class": "Tilix"},
     "konsole":         {"app_id": "org.kde.konsole", "class": "konsole"},
     "alacritty":       {"app_id": "Alacritty", "class": "Alacritty"},
     "kitty":           {"app_id": "kitty", "class": "kitty"},

@@ -754,32 +754,57 @@ class StatusApp:
         if self.menu_dirty:
             self._sync_menu()
 
+    def _click_log(self, line):
+        """One line per row click into the cache dir, so a "clicking does nothing" report
+        carries which route ran instead of a guess."""
+        try:
+            with open(CACHE_DIR / "focus.log", "a", encoding="utf-8") as f:
+                f.write(f"{time.strftime('%H:%M:%S')} {line}\n")
+        except OSError:
+            pass
+
+    def _raise_activatable(self, desktop_id):
+        """Present a DBus-activatable app through Gio with a Gdk launch context. The
+        context mints an activation token from the click that opened our menu; without
+        a token, Wayland compositors treat the focus transfer as focus stealing and
+        quietly refuse it."""
+        try:
+            from gi.repository import Gio
+            info = Gio.DesktopAppInfo.new(desktop_id)
+            if info is None:
+                self._click_log(f"{desktop_id}: no such desktop entry")
+                return
+            ctx = self.Gdk.Display.get_default().get_app_launch_context()
+            ctx.set_timestamp(self.Gtk.get_current_event_time())
+            info.launch([], ctx)
+            self._click_log(f"{desktop_id}: activated (event time {self.Gtk.get_current_event_time()})")
+        except Exception as e:
+            self._click_log(f"{desktop_id}: {e}")
+
     def _focus_backend(self, s):
         """A zero-argument raiser for this session's terminal, or None when no route fits
         this desktop. Raises the terminal APP, not the exact tab, matching macOS.
-        Compositor commands go first where their sockets exist; then DBus activation
-        (verified to present the existing window, not spawn one, on GNOME); then wmctrl
-        for plain X11 sessions."""
-        def spawn(argv):
-            return lambda: subprocess.Popen(argv, stdout=subprocess.DEVNULL,
-                                            stderr=subprocess.DEVNULL)
+        Compositor commands go first where their sockets exist; then token-carrying Gio
+        activation for DBus-activatable terminals; then wmctrl for plain X11 sessions."""
+        def spawn(argv, note):
+            def run():
+                self._click_log(note)
+                subprocess.Popen(argv, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return run
         if s.term_program == "vscode":
             code = shutil.which("code")
-            return spawn([code]) if code else None  # single-instance: bare `code` focuses it
+            return spawn([code], "vscode via code") if code else None  # single instance: bare `code` focuses it
         term = core.terminal_for_pid(s.pid) if s.pid > 0 else None
         if term is None:
             return None
         if os.environ.get("SWAYSOCK") and shutil.which("swaymsg"):
-            return spawn(["swaymsg", f'[app_id="{term["app_id"]}"]', "focus"])
+            return spawn(["swaymsg", f'[app_id="{term["app_id"]}"]', "focus"], f"sway {term['app_id']}")
         if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and shutil.which("hyprctl"):
-            return spawn(["hyprctl", "dispatch", "focuswindow", f'class:{term["app_id"]}'])
-        if term.get("dbus"):
-            name = term["dbus"]
-            return spawn(["gdbus", "call", "--session", "--dest", name,
-                          "--object-path", "/" + name.replace(".", "/"),
-                          "--method", "org.freedesktop.Application.Activate", "{}"])
+            return spawn(["hyprctl", "dispatch", "focuswindow", f'class:{term["app_id"]}'], f"hyprland {term['app_id']}")
+        if term.get("desktop"):
+            return lambda: self._raise_activatable(term["desktop"])
         if os.environ.get("XDG_SESSION_TYPE") == "x11" and shutil.which("wmctrl"):
-            return spawn(["wmctrl", "-x", "-a", term["class"]])
+            return spawn(["wmctrl", "-x", "-a", term["class"]], f"wmctrl {term['class']}")
         return None
 
     def _quit_clicked(self, *_):
@@ -896,8 +921,8 @@ class StatusApp:
         import gi
         gi.require_version("Gtk", "3.0")
         gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import Gtk, GLib, AyatanaAppIndicator3 as AppIndicator
-        self.Gtk, self.GLib = Gtk, GLib
+        from gi.repository import Gtk, Gdk, GLib, AyatanaAppIndicator3 as AppIndicator
+        self.Gtk, self.Gdk, self.GLib = Gtk, Gdk, GLib
 
         try:
             QUIT_MARKER.unlink()

@@ -197,7 +197,7 @@ class Extras(unittest.TestCase):
     def test_terminal_for_pid(self):
         tree = {100: (99, "claude"), 99: (98, "bash"), 98: (97, "gnome-terminal-"), 97: (1, "systemd")}
         comm, ppid = (lambda p: tree[p][1]), (lambda p: tree[p][0])
-        self.assertEqual(core.terminal_for_pid(100, comm, ppid)["dbus"], "org.gnome.Terminal")
+        self.assertEqual(core.terminal_for_pid(100, comm, ppid)["desktop"], "org.gnome.Terminal.desktop")
         # Chain ending at init with no terminal met: no route.
         bare = {100: (1, "claude")}
         self.assertIsNone(core.terminal_for_pid(100, lambda p: bare[p][1], lambda p: bare[p][0]))
