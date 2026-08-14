@@ -3,7 +3,7 @@
 
 A port of the macOS menu bar app (Sources/main.swift) over the same contract: hooks write
 per-session JSON files to ~/.claude/statusbar/state.d/, this app polls them and renders one
-aggregate icon — animating while any session works, an amber dot when one awaits permission,
+aggregate icon: animating while any session works, an amber dot when one awaits permission,
 resting on the Claude logo otherwise. It is launched by the hooks and quits itself when no
 session is left, so there is nothing to manage.
 
@@ -52,7 +52,7 @@ IDLE_QUIT_DELAY = 3  # "not needed" must persist this long before quitting
 
 SPARK_FPS = 9.0
 CRAB_FPS = 12.5
-CODE_SUB = 6         # sub-frames per glyph (18 on macOS; fewer here — each frame is a DBus icon swap)
+CODE_SUB = 6         # sub-frames per glyph; 18 on macOS, fewer here since each frame is a DBus icon swap
 CODE_CYCLE = 3.8     # seconds for the full 5-glyph loop
 CODE_DIP = 0.14      # glyph shrinks to this at each swap
 

@@ -190,8 +190,8 @@ class Icons(unittest.TestCase):
         icons.ensure("crab", "white")
         orange = Image.open(icons.assets / "crab-0.png").convert("RGBA")
         white = Image.open(icons.dir / "csb-crab-white-0.png").convert("RGBA")
-        # The template transform must produce holes (alpha 0) at pixels that were dark and
-        # opaque in the source — the crab's eyes read as negative space.
+        # The template transform turns dark opaque source pixels into holes (alpha 0),
+        # so the crab's eyes read as negative space.
         src, out = orange.load(), white.load()
         holes = sum(
             1

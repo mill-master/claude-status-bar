@@ -209,7 +209,7 @@ def branch_for_cwd(cwd):
 
 
 def elapsed(secs):
-    """"1m 1s" / "43s" — Claude Code's elapsed-clock style."""
+    """"1m 1s" / "43s", the elapsed-clock style Claude Code itself uses."""
     secs = max(0, int(secs))
     m, s = divmod(secs, 60)
     return f"{m}m {s}s" if m else f"{s}s"
