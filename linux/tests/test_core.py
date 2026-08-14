@@ -164,6 +164,14 @@ class Formatting(unittest.TestCase):
         for _ in range(50):
             self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
 
+    def test_notify_plan_modes(self):
+        self.assertEqual(core.notify_plan("off", ["a"], [("a", 500)]), [])
+        self.assertEqual(core.notify_plan("permission", ["proj"], [("proj", 500)]),
+                         [("proj needs permission", "Claude is waiting for your approval")])
+        plan = core.notify_plan("all", [], [("proj", 90), ("quick", 5)])
+        self.assertEqual(plan, [("proj finished", "The turn ran 1m 30s")])  # short turns stay quiet
+        self.assertEqual(core.notify_plan("bogus", ["a"], []), [])
+
     def test_bar_label_counts_working_sessions(self):
         self.assertEqual(core.bar_label("Percolating…", 1, True), "Percolating…")
         self.assertEqual(core.bar_label("Percolating…", 3, True), "Percolating…  ×3")

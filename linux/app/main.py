@@ -62,6 +62,7 @@ DEFAULT_SETTINGS = {
     "animStyle": "web",        # web | code | crab
     "iconColor": "orange",     # orange | white | black
     "soundThreshold": 0,       # 0 = off; else min turn length (seconds) that chimes on completion
+    "notifyMode": "off",       # off | permission | all (permission + turns >= NOTIFY_DONE_MIN)
     "hideIdleAfter": 900,      # hide a resting session's row after this long; 0 = never
     "installedVersion": "",
     "latestVersion": "",
@@ -69,6 +70,7 @@ DEFAULT_SETTINGS = {
 }
 
 SOUND_CHOICES = [(0, "Off"), (0.1, "Every turn"), (60, "1 min+"), (300, "5 min+"), (900, "15 min+")]
+NOTIFY_CHOICES = [("off", "Off"), ("permission", "Permission"), ("all", "Permission + turn end")]
 STYLE_CHOICES = [("web", "Claude Spark"), ("code", "Claude Code"), ("crab", "Crab Walking")]
 COLOR_CHOICES = [("orange", "Orange"), ("white", "White"), ("black", "Black")]
 
@@ -305,6 +307,7 @@ class StatusApp:
         self.session_items = {}   # id -> Gtk.MenuItem
         self._syncing_menu = False
         self.player = None        # Gst playbin, if GStreamer is available
+        self.Notify = None        # gi Notify module, if libnotify is available
 
     # -- assets / settings --
 
@@ -367,6 +370,8 @@ class StatusApp:
     def evaluate(self):
         now = time.time()
         chime = False
+        perm_edges, done_edges = [], []
+        sound_threshold = float(self.setting("soundThreshold") or 0)
         stale_age = float(self.setting("hideIdleAfter") or 0)
         for sid in list(self.sessions):
             s = self.sessions[sid]
@@ -381,8 +386,13 @@ class StatusApp:
                 self.file_mtimes.pop(f"{sid}.json", None)
                 continue
             self._update_thinking_word(s)
-            if self._completion_edge(s, now):
-                chime = True
+            if s.state == "permission" and self.prev_state.get(sid, "") != "permission":
+                perm_edges.append(sid)
+            secs = self._turn_completed(s, now)
+            if secs is not None:
+                if sound_threshold > 0 and secs >= sound_threshold:
+                    chime = True
+                done_edges.append((sid, secs))
             self.prev_state[sid] = s.state
         for sid in list(self.prev_state):
             if sid not in self.sessions:
@@ -392,6 +402,13 @@ class StatusApp:
             self._play_sound()
 
         core.assign_display_names(list(self.sessions.values()))
+        if (perm_edges or done_edges) and self.Notify is not None:
+            names = {s.id: core.session_name(s) for s in self.sessions.values()}
+            for title, body in core.notify_plan(
+                    self.setting("notifyMode"),
+                    [names.get(i, "session") for i in perm_edges],
+                    [(names.get(i, "session"), secs) for i, secs in done_edges]):
+                self._show_notification(title, body)
         lead = core.pick_lead(self.sessions.values())
         self.working_count = sum(1 for s in self.sessions.values() if s.eff in core.WORKING_STATES)
         self.lead_working = lead is not None and lead.eff in core.WORKING_STATES
@@ -412,19 +429,20 @@ class StatusApp:
         if s.state == "thinking" and self.prev_state.get(s.id, "") != "thinking":
             self.session_word[s.id] = core.pick_thinking_word(self.words, self.session_word.get(s.id))
 
-    def _completion_edge(self, s, now):
+    def _turn_completed(self, s, now):
+        """Seconds the turn ran when this event is a working-to-done edge, else None.
+        The completion sound and the turn-end notification both gate on it."""
         if s.state in core.WORKING_STATES and s.started_at > 0:
             self.turn_start[s.id] = s.started_at
-        threshold = float(self.setting("soundThreshold") or 0)
         prev = self.prev_state.get(s.id, "")
-        edge = False
-        if threshold > 0 and s.state == "done" and prev != "done":
+        secs = None
+        if s.state == "done" and prev != "done":
             st = self.turn_start.get(s.id, 0)
-            if st > 0 and now - st >= threshold:
-                edge = True
+            if st > 0:
+                secs = now - st
         if s.state == "done":
             self.turn_start[s.id] = 0
-        return edge
+        return secs
 
     # -- self-quit lifecycle --
 
@@ -532,7 +550,7 @@ class StatusApp:
             tuple(s.id for s in visible),
             self.style, self.color, bool(self.setting("showTimer")),
             bool(self.setting("thinkingWords")), float(self.setting("soundThreshold") or 0),
-            self.setting("latestVersion"),
+            self.setting("notifyMode"), self.setting("latestVersion"),
         )
         if signature != self.menu_signature:
             self.menu_signature = signature
@@ -603,6 +621,8 @@ class StatusApp:
         self._radio_submenu(menu, "Color", COLOR_CHOICES, "iconColor", str)
         if self.player is not None:
             self._radio_submenu(menu, "Completion Sound", SOUND_CHOICES, "soundThreshold", float)
+        if self.Notify is not None:
+            self._radio_submenu(menu, "Notifications", NOTIFY_CHOICES, "notifyMode", str)
 
         menu.append(Gtk.SeparatorMenuItem())
         version_item = Gtk.MenuItem(label=f"Version {self.version}")
@@ -658,6 +678,25 @@ class StatusApp:
         try:
             self.player.set_state(self.Gst.State.NULL)
             self.player.set_state(self.Gst.State.PLAYING)
+        except Exception:
+            pass
+
+    # -- desktop notifications --
+
+    def _init_notify(self):
+        try:
+            import gi
+            gi.require_version("Notify", "0.7")
+            from gi.repository import Notify
+            if Notify.init("Claude Status Bar"):
+                self.Notify = Notify
+        except Exception:
+            self.Notify = None  # libnotify absent: the Notifications menu is simply not offered
+
+    def _show_notification(self, title, body):
+        try:
+            icon = str(self.icons.dir / f"{self.icons.resting('web', 'orange')}.png")
+            self.Notify.Notification.new(title, body, icon).show()
         except Exception:
             pass
 
@@ -727,6 +766,7 @@ class StatusApp:
             pass
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         self._init_sound()
+        self._init_notify()
 
         self.indicator = AppIndicator.Indicator.new(
             APP_ID, self.icons.resting(self.style, self.color),

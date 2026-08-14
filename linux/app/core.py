@@ -266,6 +266,28 @@ def status_text(s, eff, use_thinking_words, word):
     return "Done" if s.state == "done" else "Idle"
 
 
+# A finished turn shorter than this is not worth a desktop notification.
+NOTIFY_DONE_MIN = 60
+
+
+def notify_plan(mode, permission_names, done_turns):
+    """The desktop notifications this tick's edges earn under the chosen mode.
+
+    permission_names: session names that just began awaiting permission.
+    done_turns: (session name, turn seconds) for turns that just finished.
+    Returns (title, body) pairs; mode "off" and unknown modes return nothing.
+    """
+    out = []
+    if mode in ("permission", "all"):
+        for name in permission_names:
+            out.append((f"{name} needs permission", "Claude is waiting for your approval"))
+    if mode == "all":
+        for name, secs in done_turns:
+            if secs >= NOTIFY_DONE_MIN:
+                out.append((f"{name} finished", f"The turn ran {elapsed(secs)}"))
+    return out
+
+
 def bar_label(base, working_count, lead_working, elapsed_text=""):
     """The bar's full label: the lead's message, a ×N count when several sessions work at
     once (only while the lead itself is working, so a permission message stays unambiguous
