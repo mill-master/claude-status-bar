@@ -1,0 +1,7 @@
+{
+  "uuid": "claude-status-bar-focus@mill-master.github.io",
+  "name": "Claude Status Bar Focus",
+  "description": "Lets Claude Status Bar raise the terminal window of a clicked session. A background app cannot move focus on GNOME Wayland; this extension does it with the compositor's blessing. It does nothing else.",
+  "shell-version": ["45", "46", "47", "48", "49"],
+  "url": "https://github.com/mill-master/claude-status-bar"
+}

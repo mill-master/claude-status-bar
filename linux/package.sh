@@ -20,6 +20,12 @@ mkdir -p "$STAGE/DEBIAN" "$STAGE/usr/bin" "$SHARE/app" "$SHARE/hooks" "$STAGE/us
 
 python3 linux/gen-assets.py --repo . --out "$SHARE/assets"
 install -m 644 linux/app/core.py linux/app/main.py "$SHARE/app/"
+
+# The GNOME extension that lets a row click raise the session's terminal (GNOME refuses
+# focus moves from background apps). Installed system-wide; the user enables it once.
+EXT_UUID="claude-status-bar-focus@mill-master.github.io"
+mkdir -p "$STAGE/usr/share/gnome-shell/extensions/$EXT_UUID"
+install -m 644 "linux/gnome-extension/$EXT_UUID/"* "$STAGE/usr/share/gnome-shell/extensions/$EXT_UUID/"
 printf 'VERSION = "%s"\n' "$VERSION" > "$SHARE/app/_version.py"
 install -m 644 hooks/update.js hooks/lifecycle.js hooks/install.js hooks/uninstall.js "$SHARE/hooks/"
 install -m 644 LICENSE "$STAGE/usr/share/doc/$PKG/copyright"

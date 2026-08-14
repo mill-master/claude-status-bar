@@ -267,20 +267,21 @@ def status_text(s, eff, use_thinking_words, word):
 
 
 # Terminal emulators a session row can jump to, keyed by /proc comm (kernel-truncated to
-# 15 chars). Each carries the raise routes it supports: "desktop" for DBus-activatable
-# apps raised through Gio with an activation token (Wayland compositors refuse the focus
-# transfer without one), "app_id" for sway/hyprland focus commands, "class" for X11 wmctrl.
+# 15 chars). Routes per desktop: "match" is the case-insensitive substring the bundled
+# GNOME extension matches against window class / app id (a background app cannot move
+# focus on GNOME Wayland; the extension raises windows with the compositor's blessing),
+# "app_id" drives sway/hyprland focus commands, "class" drives X11 wmctrl.
 TERMINALS = {
-    "gnome-terminal-": {"desktop": "org.gnome.Terminal.desktop", "app_id": "org.gnome.Terminal", "class": "Gnome-terminal"},
-    "ptyxis":          {"desktop": "org.gnome.Ptyxis.desktop", "app_id": "org.gnome.Ptyxis", "class": "org.gnome.Ptyxis"},
-    "kgx":             {"desktop": "org.gnome.Console.desktop", "app_id": "org.gnome.Console", "class": "Kgx"},
-    "tilix":           {"desktop": "com.gexperts.Tilix.desktop", "app_id": "com.gexperts.Tilix", "class": "Tilix"},
-    "konsole":         {"app_id": "org.kde.konsole", "class": "konsole"},
-    "alacritty":       {"app_id": "Alacritty", "class": "Alacritty"},
-    "kitty":           {"app_id": "kitty", "class": "kitty"},
-    "wezterm-gui":     {"app_id": "org.wezfurlong.wezterm", "class": "org.wezfurlong.wezterm"},
-    "foot":            {"app_id": "foot", "class": "foot"},
-    "xterm":           {"app_id": "xterm", "class": "XTerm"},
+    "gnome-terminal-": {"match": "gnome-terminal", "app_id": "org.gnome.Terminal", "class": "Gnome-terminal"},
+    "ptyxis":          {"match": "ptyxis", "app_id": "org.gnome.Ptyxis", "class": "org.gnome.Ptyxis"},
+    "kgx":             {"match": "kgx", "app_id": "org.gnome.Console", "class": "Kgx"},
+    "tilix":           {"match": "tilix", "app_id": "com.gexperts.Tilix", "class": "Tilix"},
+    "konsole":         {"match": "konsole", "app_id": "org.kde.konsole", "class": "konsole"},
+    "alacritty":       {"match": "alacritty", "app_id": "Alacritty", "class": "Alacritty"},
+    "kitty":           {"match": "kitty", "app_id": "kitty", "class": "kitty"},
+    "wezterm-gui":     {"match": "wezterm", "app_id": "org.wezfurlong.wezterm", "class": "org.wezfurlong.wezterm"},
+    "foot":            {"match": "foot", "app_id": "foot", "class": "foot"},
+    "xterm":           {"match": "xterm", "app_id": "xterm", "class": "XTerm"},
 }
 
 

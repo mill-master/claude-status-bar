@@ -386,6 +386,7 @@ class StatusApp:
         self._syncing_menu = False
         self.menu_mapped = False  # the dropdown is on screen right now
         self.menu_dirty = False   # a structural change waits for it to close
+        self._focus_ext_ready = False  # refreshed on each menu build
         self.player = None        # Gst playbin, if GStreamer is available
         self.Notify = None        # gi Notify module, if libnotify is available
 
@@ -692,6 +693,7 @@ class StatusApp:
         Gtk = self.Gtk
         menu = Gtk.Menu()
         self.session_items = {}
+        self._focus_ext_ready = self._focus_extension_ready()
 
         if visible:
             self._header(menu, "Sessions")
@@ -763,29 +765,41 @@ class StatusApp:
         except OSError:
             pass
 
-    def _raise_activatable(self, desktop_id):
-        """Present a DBus-activatable app through Gio with a Gdk launch context. The
-        context mints an activation token from the click that opened our menu; without
-        a token, Wayland compositors treat the focus transfer as focus stealing and
-        quietly refuse it."""
+    FOCUS_EXT_NAME = "io.github.millmaster.ClaudeStatusBarFocus"
+    FOCUS_EXT_PATH = "/io/github/millmaster/ClaudeStatusBarFocus"
+
+    def _focus_extension_ready(self):
+        """Whether the bundled GNOME extension owns its bus name right now. Checked per
+        menu build: cheap, and it flips when the user enables the extension mid-run."""
         try:
-            from gi.repository import Gio
-            info = Gio.DesktopAppInfo.new(desktop_id)
-            if info is None:
-                self._click_log(f"{desktop_id}: no such desktop entry")
-                return
-            ctx = self.Gdk.Display.get_default().get_app_launch_context()
-            ctx.set_timestamp(self.Gtk.get_current_event_time())
-            info.launch([], ctx)
-            self._click_log(f"{desktop_id}: activated (event time {self.Gtk.get_current_event_time()})")
+            from gi.repository import Gio, GLib
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            res = bus.call_sync("org.freedesktop.DBus", "/org/freedesktop/DBus",
+                                "org.freedesktop.DBus", "NameHasOwner",
+                                GLib.Variant("(s)", (self.FOCUS_EXT_NAME,)),
+                                None, Gio.DBusCallFlags.NONE, 1000, None)
+            return bool(res.unpack()[0])
+        except Exception:
+            return False
+
+    def _raise_via_extension(self, match):
+        try:
+            from gi.repository import Gio, GLib
+            bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+            res = bus.call_sync(self.FOCUS_EXT_NAME, self.FOCUS_EXT_PATH,
+                                self.FOCUS_EXT_NAME, "Raise",
+                                GLib.Variant("(s)", (match,)),
+                                None, Gio.DBusCallFlags.NONE, 2000, None)
+            self._click_log(f"extension raise {match!r}: raised={res.unpack()[0]}")
         except Exception as e:
-            self._click_log(f"{desktop_id}: {e}")
+            self._click_log(f"extension raise {match!r}: {e}")
 
     def _focus_backend(self, s):
         """A zero-argument raiser for this session's terminal, or None when no route fits
-        this desktop. Raises the terminal APP, not the exact tab, matching macOS.
-        Compositor commands go first where their sockets exist; then token-carrying Gio
-        activation for DBus-activatable terminals; then wmctrl for plain X11 sessions."""
+        this desktop (then the row stays display-only). Raises the terminal APP's topmost
+        window, not the exact tab, matching macOS. Routes: compositor commands where
+        their sockets exist; the bundled GNOME extension when enabled (a background app
+        cannot move focus on GNOME Wayland by itself); wmctrl on plain X11."""
         def spawn(argv, note):
             def run():
                 self._click_log(note)
@@ -801,8 +815,8 @@ class StatusApp:
             return spawn(["swaymsg", f'[app_id="{term["app_id"]}"]', "focus"], f"sway {term['app_id']}")
         if os.environ.get("HYPRLAND_INSTANCE_SIGNATURE") and shutil.which("hyprctl"):
             return spawn(["hyprctl", "dispatch", "focuswindow", f'class:{term["app_id"]}'], f"hyprland {term['app_id']}")
-        if term.get("desktop"):
-            return lambda: self._raise_activatable(term["desktop"])
+        if self._focus_ext_ready:
+            return lambda: self._raise_via_extension(term["match"])
         if os.environ.get("XDG_SESSION_TYPE") == "x11" and shutil.which("wmctrl"):
             return spawn(["wmctrl", "-x", "-a", term["class"]], f"wmctrl {term['class']}")
         return None
@@ -921,8 +935,8 @@ class StatusApp:
         import gi
         gi.require_version("Gtk", "3.0")
         gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import Gtk, Gdk, GLib, AyatanaAppIndicator3 as AppIndicator
-        self.Gtk, self.Gdk, self.GLib = Gtk, Gdk, GLib
+        from gi.repository import Gtk, GLib, AyatanaAppIndicator3 as AppIndicator
+        self.Gtk, self.GLib = Gtk, GLib
 
         try:
             QUIT_MARKER.unlink()
