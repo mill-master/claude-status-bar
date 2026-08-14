@@ -50,6 +50,7 @@ COLORS = {"orange": ORANGE, "white": (255, 255, 255), "black": (0, 0, 0)}
 
 LAUNCH_GRACE = 5     # settle time after launch before we may quit
 IDLE_QUIT_DELAY = 3  # "not needed" must persist this long before quitting
+PERMISSION_FLASH_AFTER = 30  # a permission wait older than this starts pulsing the dot
 
 SPARK_FPS = 9.0
 CRAB_FPS = 12.5
@@ -348,6 +349,16 @@ class IconSet:
             self._write(name, big.resize((60, 60), Image.LANCZOS))
         return name
 
+    def dot_dim(self):
+        """The faded counterpart the attention flash alternates with."""
+        name = "csb-dot-dim"
+        if not (self.dir / f"{name}.png").exists():
+            from PIL import Image, ImageDraw
+            big = Image.new("RGBA", (240, 240), (0, 0, 0, 0))
+            ImageDraw.Draw(big).ellipse((60, 60, 180, 180), fill=AMBER + (80,))
+            self._write(name, big.resize((60, 60), Image.LANCZOS))
+        return name
+
     def fps(self, style):
         if style.startswith("gif:"):
             return self._load_gif(style[len("gif:"):])[1]
@@ -374,6 +385,8 @@ class StatusApp:
         self.launched_at = time.time()
         self.not_needed_since = None
         self.anim_source = None
+        self.flash_source = None
+        self._flash_on = True
         self.frame_idx = 0
         self.frame_names = []
         self.current_icon = None
@@ -494,7 +507,10 @@ class StatusApp:
         if lead is None:
             self._render(icon=self.icons.resting(self.style, self.color), label="", started_at=0)
         elif lead.eff == "permission":
-            self._render(icon=self.icons.dot(), label="Awaiting permission", started_at=0)
+            # A wait that has dragged past the threshold pulses; the static dot is easy
+            # to miss among tray icons.
+            self._render(icon=self.icons.dot(), label="Awaiting permission", started_at=0,
+                         flash=now - lead.ts > PERMISSION_FLASH_AFTER)
         elif lead.eff in core.WORKING_STATES:
             self._render(animate=True,
                          label=core.status_text(lead, lead.eff, self.setting("thinkingWords"),
@@ -555,8 +571,15 @@ class StatusApp:
             return self.auto_color
         return c if c in COLORS else "orange"
 
-    def _render(self, icon=None, animate=False, label="", started_at=0.0):
+    def _render(self, icon=None, animate=False, label="", started_at=0.0, flash=False):
         self.lead_started_at = started_at
+        if not animate and self.anim_source is not None:
+            self.GLib.source_remove(self.anim_source)
+            self.anim_source = None
+        if not flash and self.flash_source is not None:
+            self.GLib.source_remove(self.flash_source)
+            self.flash_source = None
+            self._flash_on = True
         if animate:
             if self.anim_source is None:
                 self.frame_names = self.icons.ensure(self.style, self.color)
@@ -564,16 +587,22 @@ class StatusApp:
                 interval = int(1000 / self.icons.fps(self.style))
                 self.anim_source = self.GLib.timeout_add(interval, self._anim_step)
                 self._set_icon(self.frame_names[0])
+        elif flash:
+            if self.flash_source is None:
+                self.flash_source = self.GLib.timeout_add(600, self._flash_step)
+                self._set_icon(self.icons.dot())
         else:
-            if self.anim_source is not None:
-                self.GLib.source_remove(self.anim_source)
-                self.anim_source = None
             self._set_icon(icon)
         self._apply_label(label)
 
     def _anim_step(self):
         self.frame_idx = (self.frame_idx + 1) % len(self.frame_names)
         self._set_icon(self.frame_names[self.frame_idx])
+        return True
+
+    def _flash_step(self):
+        self._flash_on = not self._flash_on
+        self._set_icon(self.icons.dot() if self._flash_on else self.icons.dot_dim())
         return True
 
     def _set_icon(self, name):
@@ -595,9 +624,11 @@ class StatusApp:
     def restyle(self):
         """Re-render the current state after a style/color change."""
         self.auto_color = detect_auto_color()
-        if self.anim_source is not None:
-            self.GLib.source_remove(self.anim_source)
-            self.anim_source = None
+        for attr in ("anim_source", "flash_source"):
+            source = getattr(self, attr)
+            if source is not None:
+                self.GLib.source_remove(source)
+                setattr(self, attr, None)
         self.current_icon = None
         self.evaluate()
 

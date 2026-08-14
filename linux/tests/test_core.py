@@ -246,7 +246,8 @@ class Icons(unittest.TestCase):
         self.assertEqual(len(icons.ensure("web", "orange")), 8)
         self.assertEqual(len(icons.ensure("code", "white")), 30)
         self.assertEqual(len(icons.ensure("crab", "black")), 20)
-        for name in (icons.resting("web", "orange"), icons.resting("crab", "orange"), icons.dot()):
+        for name in (icons.resting("web", "orange"), icons.resting("crab", "orange"),
+                     icons.dot(), icons.dot_dim()):
             self.assertTrue((icons.dir / f"{name}.png").exists(), name)
 
     def test_custom_gif_becomes_an_animation(self):
