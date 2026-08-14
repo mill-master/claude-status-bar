@@ -72,7 +72,17 @@ DEFAULT_SETTINGS = {
 SOUND_CHOICES = [(0, "Off"), (0.1, "Every turn"), (60, "1 min+"), (300, "5 min+"), (900, "15 min+")]
 NOTIFY_CHOICES = [("off", "Off"), ("permission", "Permission"), ("all", "Permission + turn end")]
 STYLE_CHOICES = [("web", "Claude Spark"), ("code", "Claude Code"), ("crab", "Crab Walking")]
-COLOR_CHOICES = [("orange", "Orange"), ("white", "White"), ("black", "Black")]
+COLOR_CHOICES = [("orange", "Orange"), ("auto", "Auto"), ("white", "White"), ("black", "Black")]
+
+
+def detect_auto_color():
+    try:
+        scheme = subprocess.run(
+            ["gsettings", "get", "org.gnome.desktop.interface", "color-scheme"],
+            capture_output=True, text=True, timeout=5).stdout
+    except Exception:
+        scheme = ""
+    return core.auto_icon_color(os.environ.get("XDG_CURRENT_DESKTOP", ""), scheme)
 
 
 def app_dir():
@@ -285,6 +295,7 @@ class StatusApp:
         self.settings = load_settings()
         self.icons = IconSet(self.version)
         self.words = self._load_words()
+        self.auto_color = detect_auto_color()
 
         self.sessions = {}        # id -> core.Session
         self.file_mtimes = {}     # "<id>.json" -> mtime (re-parse only on change)
@@ -468,6 +479,8 @@ class StatusApp:
     @property
     def color(self):
         c = self.setting("iconColor")
+        if c == "auto":
+            return self.auto_color
         return c if c in COLORS else "orange"
 
     def _render(self, icon=None, animate=False, label="", started_at=0.0):
@@ -509,6 +522,7 @@ class StatusApp:
 
     def restyle(self):
         """Re-render the current state after a style/color change."""
+        self.auto_color = detect_auto_color()
         if self.anim_source is not None:
             self.GLib.source_remove(self.anim_source)
             self.anim_source = None

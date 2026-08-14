@@ -164,6 +164,12 @@ class Formatting(unittest.TestCase):
         for _ in range(50):
             self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
 
+    def test_auto_icon_color(self):
+        self.assertEqual(core.auto_icon_color("ubuntu:GNOME", "'default'"), "white")
+        self.assertEqual(core.auto_icon_color("KDE", "'prefer-dark'"), "white")
+        self.assertEqual(core.auto_icon_color("KDE", "'default'"), "black")
+        self.assertEqual(core.auto_icon_color("", ""), "black")
+
     def test_notify_plan_modes(self):
         self.assertEqual(core.notify_plan("off", ["a"], [("a", 500)]), [])
         self.assertEqual(core.notify_plan("permission", ["proj"], [("proj", 500)]),

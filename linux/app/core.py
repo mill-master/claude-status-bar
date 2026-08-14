@@ -266,6 +266,14 @@ def status_text(s, eff, use_thinking_words, word):
     return "Done" if s.state == "done" else "Idle"
 
 
+def auto_icon_color(desktop, color_scheme):
+    """The icon ink for the "Auto" color: white on GNOME, whose top bar is dark in the
+    stock themes whatever the color scheme says; elsewhere follow the scheme."""
+    if "gnome" in (desktop or "").lower():
+        return "white"
+    return "white" if "dark" in (color_scheme or "").lower() else "black"
+
+
 # A finished turn shorter than this is not worth a desktop notification.
 NOTIFY_DONE_MIN = 60
 
