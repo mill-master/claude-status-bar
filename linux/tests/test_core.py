@@ -164,6 +164,23 @@ class Formatting(unittest.TestCase):
         for _ in range(50):
             self.assertEqual(core.pick_thinking_word(["a", "b"], previous="a"), "b")
 
+    def test_waybar_payload(self):
+        self.assertEqual(core.waybar_payload([], now=1000),
+                         {"text": "", "class": "idle", "tooltip": ""})
+        idle = sess(id="a", eff="idle", state="idle", project="quiet", ts=100)
+        self.assertEqual(core.waybar_payload([idle], now=1000)["text"], "❯")
+        work = sess(id="b", eff="tool", state="tool", label="Editing", project="repo",
+                    started_at=940, ts=990)
+        p = core.waybar_payload([idle, work], now=1000)
+        self.assertEqual(p["text"], "✳ Editing  1m 0s")
+        self.assertEqual(p["class"], "working")
+        self.assertIn("✳ repo  1m 0s", p["tooltip"])
+        self.assertIn("❯ quiet", p["tooltip"])
+        perm = sess(id="c", eff="permission", state="permission", project="ask", ts=995)
+        p = core.waybar_payload([idle, work, perm], now=1000)
+        self.assertEqual(p["text"], "⚠ Awaiting permission")
+        self.assertEqual(p["class"], "permission")
+
     def test_auto_icon_color(self):
         self.assertEqual(core.auto_icon_color("ubuntu:GNOME", "'default'"), "white")
         self.assertEqual(core.auto_icon_color("KDE", "'prefer-dark'"), "white")

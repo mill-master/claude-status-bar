@@ -306,3 +306,35 @@ def bar_label(base, working_count, lead_working, elapsed_text=""):
     if elapsed_text:
         parts.append(elapsed_text)
     return "  ".join(parts)
+
+
+STATE_GLYPHS = {"permission": "⚠", "thinking": "✳", "tool": "✳"}  # anything else rests on ❯
+
+
+def waybar_payload(sessions, now):
+    """One waybar/polybar custom-module payload (text, class, tooltip) for the aggregate.
+
+    Same precedence as the tray icon: permission over working over idle. The text is empty
+    with no sessions at all, so the module collapses when Claude Code isn't running.
+    """
+    assign_display_names(sessions)
+    lead = pick_lead(sessions)
+    lines = []
+    for s in sorted(sessions, key=lambda x: x.ts, reverse=True):
+        line = f"{STATE_GLYPHS.get(s.eff, '❯')} {session_name(s)}"
+        if s.branch:
+            line += " · " + s.branch
+        if s.eff in WORKING_STATES and s.started_at > 0:
+            line += "  " + elapsed(now - s.started_at)
+        lines.append(line)
+    tooltip = "\n".join(lines)
+    if lead is None:
+        return {"text": "", "class": "idle", "tooltip": ""}
+    if lead.eff == "permission":
+        return {"text": "⚠ Awaiting permission", "class": "permission", "tooltip": tooltip}
+    if lead.eff in WORKING_STATES:
+        working = sum(1 for s in sessions if s.eff in WORKING_STATES)
+        clock = elapsed(now - lead.started_at) if lead.started_at > 0 else ""
+        text = bar_label(f"✳ {lead.label or 'Working…'}", working, True, clock)
+        return {"text": text, "class": "working", "tooltip": tooltip}
+    return {"text": "❯", "class": "idle", "tooltip": tooltip}

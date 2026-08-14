@@ -799,18 +799,47 @@ class StatusApp:
         Gtk.main()
 
 
+def load_sessions_once(now, reap=False):
+    """Every current session, parsed with effective state and branch; used by the
+    non-GUI modes. With reap=True dead sessions are removed the way the tray app would,
+    which keeps state.d self-cleaning for tray-less (waybar-only) setups."""
+    sessions = []
+    if STATE_DIR.is_dir():
+        for f in sorted(os.listdir(STATE_DIR)):
+            if not f.endswith(".json"):
+                continue
+            s = core.load_session_file(STATE_DIR / f, f[:-len(".json")])
+            if s is None:
+                continue
+            s.eff = core.effective_state(s, now)
+            if reap and core.should_reap(s, now):
+                try:
+                    os.unlink(STATE_DIR / f)
+                except OSError:
+                    pass
+                continue
+            s.branch = core.branch_for_cwd(s.cwd)
+            sessions.append(s)
+    return sessions
+
+
+def run_waybar():
+    """--waybar: stream one waybar-format JSON line per second. Needs no GTK and no tray,
+    so it serves Sway/Hyprland/i3 setups; polybar reads the same stream with tail = true."""
+    while True:
+        now = time.time()
+        payload = core.waybar_payload(load_sessions_once(now, reap=True), now)
+        try:
+            print(json.dumps(payload), flush=True)
+        except BrokenPipeError:
+            return  # the bar went away
+        time.sleep(1)
+
+
 def dump_state():
     """--dump: print the aggregate once (no GUI), for troubleshooting."""
     now = time.time()
-    sessions = []
-    for f in sorted(os.listdir(STATE_DIR)) if STATE_DIR.is_dir() else []:
-        if not f.endswith(".json"):
-            continue
-        s = core.load_session_file(STATE_DIR / f, f[:-len(".json")])
-        if s:
-            s.eff = core.effective_state(s, now)
-            s.branch = core.branch_for_cwd(s.cwd)
-            sessions.append(s)
+    sessions = load_sessions_once(now)
     core.assign_display_names(sessions)
     lead = core.pick_lead(sessions)
     print(json.dumps({
@@ -828,6 +857,9 @@ def main():
         return
     if "--dump" in sys.argv:
         dump_state()
+        return
+    if "--waybar" in sys.argv:
+        run_waybar()
         return
     lock = acquire_single_instance()
     if lock is None:
