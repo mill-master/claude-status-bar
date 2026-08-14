@@ -97,7 +97,7 @@ test("installs portable, quoted hook commands and replaces stale hooks", (t) => 
 
   assert.equal(settings.customSetting, true);
   assert.equal(fs.existsSync(oldAgentPlist), false);
-  assert.equal(commands.length, 8);
+  assert.equal(commands.length, 9);
   assert.ok(commands.every((command) => command.startsWith(nodePathPrefix)));
   assert.ok(allCommands.every((command) => !command.includes(staleNode)));
   assert.ok(allCommands.every((command) => !command.includes(process.execPath)));
@@ -176,7 +176,7 @@ test("reinstalling is idempotent", (t) => {
   const second = readSettings(home);
 
   assert.deepEqual(second, first);
-  assert.equal(statusBarCommands(second).length, 8);
+  assert.equal(statusBarCommands(second).length, 9);
 });
 
 test("CLAUDE_CONFIG_DIR redirects settings.json; scripts stay under ~/.claude", (t) => {
@@ -189,7 +189,7 @@ test("CLAUDE_CONFIG_DIR redirects settings.json; scripts stay under ~/.claude", 
   const settings = JSON.parse(
     fs.readFileSync(path.join(configDir, "settings.json"), "utf8"),
   );
-  assert.equal(statusBarCommands(settings).length, 8);
+  assert.equal(statusBarCommands(settings).length, 9);
   assert.ok(fs.existsSync(path.join(home, ".claude", "statusbar", "update.js")));
   assert.equal(fs.existsSync(path.join(home, ".claude", "settings.json")), false);
 

@@ -88,6 +88,12 @@ process.stdin.on("end", () => {
       state = "thinking"; label = "Thinking…";
       if (!startedAt) startedAt = ts;
       break;
+    case "compact":
+      // PreCompact. Rendered as a busy "tool" so both platforms animate with this label,
+      // instead of the long silent pause that reads as a hang.
+      state = "tool"; label = "Compacting…";
+      if (!startedAt) startedAt = ts;
+      break;
     case "notify": {
       // Only a permission prompt drives the icon here (CLI path; desktop uses permreq). Ignore
       // every other Notification (esp. the idle_prompt "Claude is waiting for your input") so the
